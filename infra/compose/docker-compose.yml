@@ -1,0 +1,56 @@
+services:
+  tg-gateway:
+    build:
+      context: ../../
+      dockerfile: services/tg-gateway/Dockerfile
+    env_file:
+      - ../../env/local.compose.env.example
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 2s
+      retries: 10
+
+  orchestrator-api:
+    build:
+      context: ../../
+      dockerfile: services/orchestrator-api/Dockerfile
+    env_file:
+      - ../../env/local.compose.env.example
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
+      interval: 10s
+      timeout: 2s
+      retries: 10
+
+  web-retriever:
+    build:
+      context: ../../
+      dockerfile: services/web-retriever/Dockerfile
+    env_file:
+      - ../../env/local.compose.env.example
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/healthz"]
+      interval: 10s
+      timeout: 2s
+      retries: 10
+
+  llm-gateway:
+    build:
+      context: ../../
+      dockerfile: services/llm-gateway/Dockerfile
+    env_file:
+      - ../../env/local.compose.env.example
+    ports:
+      - "8084:8084"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/healthz"]
+      interval: 10s
+      timeout: 2s
+      retries: 10

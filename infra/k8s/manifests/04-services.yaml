@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tg-gateway
+  namespace: tagmind
+spec:
+  selector: { app: tg-gateway }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator-api
+  namespace: tagmind
+spec:
+  selector: { app: orchestrator-api }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-retriever
+  namespace: tagmind
+spec:
+  selector: { app: web-retriever }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8083
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  namespace: tagmind
+spec:
+  selector: { app: llm-gateway }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8084

@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tg-gateway
+  namespace: tagmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: tg-gateway }
+  template:
+    metadata:
+      labels: { app: tg-gateway }
+    spec:
+      containers:
+        - name: tg-gateway
+          image: tg-gateway:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8081 }]
+          envFrom:
+            - configMapRef: { name: tagmind-config }
+            - secretRef: { name: tagmind-secrets }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator-api
+  namespace: tagmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: orchestrator-api }
+  template:
+    metadata:
+      labels: { app: orchestrator-api }
+    spec:
+      containers:
+        - name: orchestrator-api
+          image: orchestrator-api:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8082 }]
+          envFrom:
+            - configMapRef: { name: tagmind-config }
+            - secretRef: { name: tagmind-secrets }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8082 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8082 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-retriever
+  namespace: tagmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: web-retriever }
+  template:
+    metadata:
+      labels: { app: web-retriever }
+    spec:
+      containers:
+        - name: web-retriever
+          image: web-retriever:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8083 }]
+          envFrom:
+            - configMapRef: { name: tagmind-config }
+            - secretRef: { name: tagmind-secrets }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8083 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8083 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  namespace: tagmind
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: llm-gateway }
+  template:
+    metadata:
+      labels: { app: llm-gateway }
+    spec:
+      containers:
+        - name: llm-gateway
+          image: llm-gateway:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8084 }]
+          envFrom:
+            - configMapRef: { name: tagmind-config }
+            - secretRef: { name: tagmind-secrets }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8084 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8084 }
+            initialDelaySeconds: 5
+            periodSeconds: 5

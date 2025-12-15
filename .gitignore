@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+.idea
+
+# Go
+/services/**/bin/
+/services/**/vendor/
+
+# Java
+/services/**/target/
+/services/**/.idea/
+/services/**/*.iml
+
+# Python
+/services/**/__pycache__/
+services/**/.venv/
+
+# Rust
+/services/**/target/
+
+# k8s/kind
+.kube/

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tagmind-config
+  namespace: tagmind
+data:
+  APP_ENV: "k8s-local"

@@ -46,6 +46,11 @@ spec:
           image: orchestrator-api:local
           imagePullPolicy: IfNotPresent
           ports: [{ containerPort: 8082 }]
+          env:
+            - name: RETRIEVER_URL
+              value: http://web-retriever/v1/search
+            - name: LLM_URL
+              value: http://llm-gateway/v1/complete
           envFrom:
             - configMapRef: { name: tagmind-config }
             - secretRef: { name: tagmind-secrets }

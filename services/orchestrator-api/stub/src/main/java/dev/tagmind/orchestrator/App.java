@@ -13,11 +13,6 @@ public class App {
 
   @RestController
   static class HealthController {
-    @GetMapping("/healthz")
-    public String health() {
-      return "ok";
-    }
-
     @GetMapping("/")
     public String root() {
       return "orchestrator-api stub";

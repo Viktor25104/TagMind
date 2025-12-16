@@ -1,0 +1,150 @@
+openapi: 3.1.0
+info:
+  title: TagMind Web Retriever API
+  version: 0.1.0
+  description: Performs web search (Google CSE) and returns structured snippets.
+
+servers:
+  - url: http://localhost:8083
+    description: local (docker compose)
+
+tags:
+  - name: health
+  - name: retriever
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+  /v1/search:
+    post:
+      tags: [retriever]
+      summary: Search the web and return snippets
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  parameters:
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Optional request correlation id. If missing, server generates one.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            badRequest:
+              value:
+                requestId: "req_123"
+                code: "BAD_REQUEST"
+                message: "Invalid payload"
+    InternalError:
+      description: Internal error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            internal:
+              value:
+                requestId: "req_123"
+                code: "INTERNAL"
+                message: "Unexpected error"
+
+  schemas:
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 512
+          example: "When did World War 2 start?"
+        recencyDays:
+          type: integer
+          minimum: 0
+          maximum: 3650
+          default: 30
+          description: Prefer results from last N days (0 = no preference)
+        maxResults:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        lang:
+          type: string
+          description: Prefer results in this language (BCP-47)
+          example: "en"
+        safe:
+          type: boolean
+          default: true
+          description: Safe search toggle
+        allowNoContext:
+          type: boolean
+          default: true
+          description: If true, allows returning results without prior chat context
+
+    SearchResponse:
+      type: object
+      required: [requestId, results]
+      properties:
+        requestId:
+          type: string
+          example: "req_123"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+
+    SearchResult:
+      type: object
+      required: [title, snippet, url]
+      properties:
+        title:
+          type: string
+        snippet:
+          type: string
+        url:
+          type: string
+          format: uri
+        source:
+          type: string
+          description:

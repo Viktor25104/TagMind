@@ -60,3 +60,7 @@ k8s-delete:
 .PHONY: check
 check:
 	./scripts/dev-check.sh
+
+.PHONY: smoke
+smoke:
+	./scripts/dev-smoke.sh

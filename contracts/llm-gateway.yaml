@@ -1,0 +1,159 @@
+openapi: 3.1.0
+info:
+  title: TagMind LLM Gateway API
+  version: 0.1.0
+  description: Wraps access to Gemini and enforces safe structured completions.
+
+servers:
+  - url: http://localhost:8084
+    description: local (docker compose)
+
+tags:
+  - name: health
+  - name: llm
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+  /v1/complete:
+    post:
+      tags: [llm]
+      summary: Generate a completion from a prompt and optional web snippets
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteRequest"
+      responses:
+        "200":
+          description: Completion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompleteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  parameters:
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Optional request correlation id. If missing, server generates one.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            badRequest:
+              value:
+                requestId: "req_123"
+                code: "סה_BAD_REQUEST"
+                message: "Invalid payload"
+    InternalError:
+      description: Internal error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            internal:
+              value:
+                requestId: "req_123"
+                code: "INTERNAL"
+                message: "Unexpected error"
+
+  schemas:
+    CompleteRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 20000
+          description: The user prompt / system prompt prepared by orchestrator
+        locale:
+          type: string
+          description: Requested locale for the final answer (BCP-47)
+          example: "ru-RU"
+        model:
+          type: string
+          description: Model identifier (e.g., Gemini variant)
+          example: "gemini-1.5-pro"
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+          default: 0.7
+        maxTokens:
+          type: integer
+          minimum: 1
+          maximum: 8192
+          default: 1024
+        citations:
+          type: array
+          description: Optional web snippets (for grounded answers)
+          items:
+            $ref: "#/components/schemas/Citation"
+
+    Citation:
+      type: object
+      required: [url, snippet]
+      properties:
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        snippet:
+          type: string
+
+    CompleteResponse:
+      type: object
+      required: [requestId, text]
+      properties:
+        requestId:
+          type: string
+          example: "req_123"
+        text:
+          type: string
+        usage:
+          type: object
+          additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required: [requestId, code, message]
+      properties:
+        requestId:
+          type: string
+        code:
+          type: string
+        message:
+          type: string

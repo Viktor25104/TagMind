@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: TagMind TG Gateway API
+  version: 0.1.0
+  description: Edge service that receives Telegram updates (webhook) and forwards normalized messages to orchestrator.
+
+servers:
+  - url: http://localhost:8081
+    description: local (docker compose)
+
+tags:
+  - name: health
+  - name: tg
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+  /v1/tg/webhook:
+    post:
+      tags: [tg]
+      summary: Telegram webhook receiver (raw update JSON)
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramUpdate"
+      responses:
+        "200":
+          description: Acknowledge update received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AckResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/tg/dev/message:
+    post:
+      tags: [tg]
+      summary: Developer endpoint to simulate an incoming message (no Telegram required)
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevMessageRequest"
+      responses:
+        "200":
+          description: Orchestrated answer (mock in phase 4)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DevMessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  parameters:
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Optional request correlation id. If missing, server generates one.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            badRequest:
+              value:
+                requestId: "req_123"
+                code: "BAD_REQUEST"
+                message: "Invalid payload"
+    InternalError:
+      description: Internal error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            internal:
+              value:
+                requestId: "req_123"
+                code: "INTERNAL"
+                message: "Unexpected error"
+
+  schemas:
+    AckResponse:
+      type: object
+      required: [requestId, ok]
+      properties:
+        requestId:
+          type: string
+          example: "req_123"
+        ok:
+          type: boolean
+          example: true
+
+    DevMessageRequest:
+      type: object
+      required: [userId, chatId, text]
+      properties:
+        userId:
+          type: string
+          example: "tg:123456"
+        chatId:
+          type: string
+          example: "tg_chat:987654"
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          example: "When did World War 2 start?"
+        locale:
+          type: string
+          example: "ru-RU"
+
+    DevMessageResponse:
+      type: object
+      required: [requestId, answer]
+      properties:
+        requestId:
+          type: string
+        answer:
+          type: string
+          example: "World War II began on September 1, 1939."
+
+    TelegramUpdate:
+      type: object
+      description: Minimal Telegram Update schema subset (we accept additional fields).
+      additionalProperties: true
+      properties:
+        update_id:
+          type: integer
+        message:
+          type: object
+          additionalProperties: true
+        edited_message:
+          type: object
+          additionalProperties: true
+        callback_query:
+          type: object
+          additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required: [requestId, code, message]
+      properties:
+        requestId:
+          type: string
+        code:
+          type: string
+        message:
+          type: string

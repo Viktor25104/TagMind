@@ -1,0 +1,149 @@
+openapi: 3.1.0
+info:
+  title: TagMind Orchestrator API
+  version: 0.1.0
+  description: Orchestrates chat-driven workflows by calling retriever and LLM services.
+
+servers:
+  - url: http://localhost:8082
+    description: local (docker compose)
+
+tags:
+  - name: health
+  - name: orchestrator
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+  /v1/orchestrate:
+    post:
+      tags: [orchestrator]
+      summary: Orchestrate a single user message into an answer
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrchestrateRequest"
+      responses:
+        "200":
+          description: Orchestration result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrchestrateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  parameters:
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Optional request correlation id. If missing, server generates one.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            badRequest:
+              value:
+                requestId: "req_123"
+                code: "BAD_REQUEST"
+                message: "Invalid payload"
+    InternalError:
+      description: Internal error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            internal:
+              value:
+                requestId: "req_123"
+                code: "INTERNAL"
+                message: "Unexpected error"
+
+  schemas:
+    OrchestrateRequest:
+      type: object
+      required: [userId, chatId, message]
+      properties:
+        userId:
+          type: string
+          description: Stable user id (Telegram user id or internal).
+          example: "tg:123456"
+        chatId:
+          type: string
+          description: Stable chat id (Telegram chat id or internal).
+          example: "tg_chat:987654"
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          example: "When did World War 2 start?"
+        mode:
+          type: string
+          description: Orchestration mode
+          enum: [chat, search_only, llm_only]
+          default: chat
+        locale:
+          type: string
+          description: Requested locale for the final answer (BCP-47)
+          example: "ru-RU"
+        context:
+          type: object
+          additionalProperties: true
+          description: Optional context hints (client-provided)
+
+    OrchestrateResponse:
+      type: object
+      required: [requestId, answer]
+      properties:
+        requestId:
+          type: string
+          example: "req_123"
+        answer:
+          type: string
+          example: "World War II began on September 1, 1939, when Germany invaded Poland."
+        used:
+          type: object
+          description: Debug metadata (safe to expose)
+          additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required: [requestId, code, message]
+      properties:
+        requestId:
+          type: string
+        code:
+          type: string
+          example: "BAD_REQUEST"
+        message:
+          type: string
+          example: "Invalid payload"

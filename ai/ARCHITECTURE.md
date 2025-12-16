@@ -10,7 +10,7 @@ Telegram → tg-gateway (Go)
    web-retriever (Python)  llm-gateway (Rust)
 ```
 
-Today the arrows stop at each service because all implementations are deterministic stubs; no cross-service calls are performed yet.
+Orchestrator now exercises the downstream stubs (retriever → llm), while external integrations remain deterministic/no-op.
 
 ## Design Principles
 - OpenAPI-first: `contracts/*.yaml` define surface; stubs implement them faithfully.

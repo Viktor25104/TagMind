@@ -2,10 +2,12 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
+
 @app.get("/healthz")
 def healthz():
-  return "ok"
+    return "ok"
+
 
 @app.get("/")
 def root():
-  return "web-retriever stub"
+    return "web-retriever stub"

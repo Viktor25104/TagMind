@@ -8,10 +8,10 @@ Purpose: Telegram edge. Accepts Telegram webhooks (JSON validated only) and prov
 - Env usage: none in stub (secrets placeholders exist for future).
 
 ## orchestrator-api (Java/Spring, `services/orchestrator-api/stub`)
-Purpose: Orchestration surface; currently echoes inputs without downstream calls.
+Purpose: Orchestration surface; calls retriever + llm-gateway stubs with request id propagation.
 - Port: 8082; Ingress: `/orchestrator/...`
 - Endpoints: `GET /healthz`, `POST /v1/orchestrate`
-- Behavior: validates required fields; returns stub answer and echoes mode/locale defaults. Request id is in response body; response header is not set in the stub.
+- Behavior: validates required fields; for modes other than `no_context` it calls web-retriever (max 3 results), converts results to llm citations, and always calls llm-gateway. Retries transient network errors once, applies connect/read timeouts, and falls back to llm-only on retriever failure. Sets `X-Request-Id` header in responses. Downstream URLs are configurable via `RETRIEVER_URL` / `LLM_URL` (compose defaults include service DNS + ports).
 - Build: Maven (JDK 21); packaged jar already present in `target/` for the stub.
 
 ## web-retriever (Python/FastAPI, `services/web-retriever/stub`)

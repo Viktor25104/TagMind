@@ -1,9 +1,9 @@
 # Next Steps — TagMind
 
 ## Near-term (keep stubs deterministic where possible)
-- Add HTTP clients in orchestrator-api to call web-retriever and llm-gateway using the existing OpenAPI contracts; propagate `X-Request-Id` to downstream and back in response headers.
-- Introduce timeouts/retries and basic error mapping in orchestrator-api before enabling real integrations.
-- Align response headers: ensure orchestrator-api sets `X-Request-Id` like other services.
+- Layer basic policy/prompt shaping in orchestrator-api (respecting `chat` / `search_only` / `llm_only` intent) and surface richer `used` metadata.
+- Make retriever/llm client settings configurable (timeouts, retries, max results, locale mapping) and add lightweight contract tests around the orchestration chain.
+- Add structured logging with request id propagation for downstream calls and errors.
 
 ## Integrations (after orchestration wiring)
 - Replace web-retriever stub with Google CSE search + HTML fetch/extract pipeline (respect existing request/response schema).

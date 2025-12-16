@@ -2,7 +2,7 @@
 
 TagMind is a Telegram-first AI assistant implemented as four small HTTP services:
 - `tg-gateway` (Go) — Telegram edge, entrypoint for developers.
-- `orchestrator-api` (Java/Spring) — assembles requests and will coordinate downstream calls.
+- `orchestrator-api` (Java/Spring) — assembles requests and coordinates retriever + llm calls.
 - `web-retriever` (Python/FastAPI) — web search abstraction (stubbed, deterministic).
 - `llm-gateway` (Rust/Axum) — LLM abstraction (stubbed, deterministic).
 

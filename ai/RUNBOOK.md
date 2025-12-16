@@ -15,7 +15,8 @@
 5) Remove: `make k8s-delete` then `make kind-down`.
 
 ## Observability/Debugging
-- Request correlation: send `X-Request-Id` header; each service echoes a request id in the body. Headers are set by all stubs except orchestrator-api (body only).
+- Request correlation: send `X-Request-Id` header; each service echoes a request id in the body and response headers.
+- Orchestrator makes intra-cluster calls to web-retriever (skipped for `mode=no_context`) and llm-gateway using service DNS; smoke tests assert this path.
 - Logs: `kubectl -n tagmind logs deploy/<service>` for k8s, `docker compose logs` for compose.
 - Network policy: `infra/k8s/manifests/06-networkpolicy.yaml` allows intra-namespace traffic and all egress.
 

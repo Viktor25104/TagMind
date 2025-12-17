@@ -75,10 +75,10 @@ public class OrchestratorController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .headers(responseHeaders)
                     .body(Map.of(
-                    "requestId", requestId,
-                    "code", "BAD_REQUEST",
-                    "message", "userId, chatId and message are required"
-            ));
+                            "requestId", requestId,
+                            "code", "BAD_REQUEST",
+                            "message", "userId, chatId and message are required"
+                    ));
         }
 
         String mode = body.mode() == null || body.mode().trim().isEmpty() ? "chat" : body.mode().trim();
@@ -142,7 +142,7 @@ public class OrchestratorController {
     }
 
     private RetrieverResponse maybeCallRetriever(String message, String mode, String locale, String requestId) {
-        if ("no_context".equalsIgnoreCase(mode)) {
+        if ("no_context".equalsIgnoreCase(mode) || "llm_only".equalsIgnoreCase(mode)) {
             return null;
         }
 

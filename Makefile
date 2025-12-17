@@ -64,3 +64,7 @@ check:
 .PHONY: smoke
 smoke:
 	./scripts/dev-smoke.sh
+
+.PHONY: merge
+merge:
+	./scripts/merge-agent-into-main.sh

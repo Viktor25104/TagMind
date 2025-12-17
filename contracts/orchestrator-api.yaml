@@ -11,6 +11,7 @@ servers:
 tags:
   - name: health
   - name: orchestrator
+  - name: conversations
 
 paths:
   /healthz:
@@ -45,6 +46,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrchestrateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/conversations/upsert:
+    post:
+      tags: [conversations]
+      summary: Create or update a conversation session for a contact
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationsUpsertRequest"
+      responses:
+        "200":
+          description: Upserted session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationsUpsertResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "500":
@@ -109,7 +134,7 @@ components:
         mode:
           type: string
           description: Orchestration mode
-          enum: [chat, search_only, llm_only]
+          enum: [chat, no_context, llm_only]
           default: chat
         locale:
           type: string
@@ -147,3 +172,33 @@ components:
         message:
           type: string
           example: "Invalid payload"
+
+    ConversationMode:
+      type: string
+      enum: [OFF, SUGGEST]
+
+    ConversationsUpsertRequest:
+      type: object
+      required: [contactId, mode]
+      properties:
+        contactId:
+          type: string
+          description: Stable contact id (e.g., Telegram user id)
+          example: "tg:12345"
+        mode:
+          $ref: "#/components/schemas/ConversationMode"
+
+    ConversationsUpsertResponse:
+      type: object
+      required: [requestId, sessionId, contactId, mode]
+      properties:
+        requestId:
+          type: string
+          example: "req_123"
+        sessionId:
+          type: string
+          format: uuid
+        contactId:
+          type: string
+        mode:
+          $ref: "#/components/schemas/ConversationMode"

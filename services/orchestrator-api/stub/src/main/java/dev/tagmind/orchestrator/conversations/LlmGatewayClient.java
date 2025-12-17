@@ -24,7 +24,15 @@ public class LlmGatewayClient {
         factory.setConnectTimeout(CONNECT_TIMEOUT);
         factory.setReadTimeout(READ_TIMEOUT);
         this.restTemplate = new RestTemplate(factory);
-        this.llmUrl = System.getenv().getOrDefault("LLM_URL", "http://llm-gateway/v1/complete");
+        String env = System.getenv("LLM_URL");
+        if (env != null && !env.trim().isEmpty()) {
+            this.llmUrl = env.trim();
+        } else {
+            String sys = System.getProperty("LLM_URL");
+            this.llmUrl = (sys != null && !sys.trim().isEmpty())
+                    ? sys.trim()
+                    : "http://llm-gateway/v1/complete";
+        }
     }
 
     public LlmResponse complete(String prompt, String requestId) throws RestClientException {
@@ -53,4 +61,3 @@ public class LlmGatewayClient {
 
     public record LlmResponse(String requestId, String text, Map<String, Object> usage) {}
 }
-

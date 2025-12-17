@@ -1,9 +1,10 @@
 # Next Steps — TagMind
 
-## Near-term (keep stubs deterministic where possible)
-- Layer basic policy/prompt shaping in orchestrator-api (respecting `chat` / `search_only` / `llm_only` intent) and surface richer `used` metadata.
-- Make retriever/llm client settings configurable (timeouts, retries, max results, locale mapping) and add lightweight contract tests around the orchestration chain.
-- Add structured logging with request id propagation for downstream calls and errors.
+## Near-term (after conversations persistence landed)
+- Wire `tg-gateway` into orchestrator conversations (next sprint): normalize Telegram updates into `{contactId, message}` and call `POST /v1/conversations/message`.
+- Improve suggestion quality by shaping the LLM prompt (system + user) and by using stored message history (currently only persistence is implemented; history is not fed into prompts yet).
+- Add API to fetch conversation history for debugging (read-only) and/or to prune old messages.
+- Add structured logging (incl. request id) and DB-level observability (slow queries, connection pool).
 
 ## Integrations (after orchestration wiring)
 - Replace web-retriever stub with Google CSE search + HTML fetch/extract pipeline (respect existing request/response schema).
@@ -11,5 +12,5 @@
 - Implement Telegram webhook registration/verification in tg-gateway and route normalized messages to orchestrator-api.
 
 ## Operational hardening
-- Add persistence (Postgres/Redis) for policies, notes, rate limiting, audit logs.
+- Extend persistence beyond conversations: policies/allowlists, notes, audit log, rate limiting (likely Redis).
 - Add authn/authz, rate limits, and structured logging; extend smoke tests accordingly.

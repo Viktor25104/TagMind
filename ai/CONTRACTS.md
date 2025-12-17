@@ -7,9 +7,10 @@ OpenAPI 3.1 contracts live in `contracts/`. They are the source of truth for HTT
 - Notes: Accepts raw Telegram update JSON with `additionalProperties: true`. Responses include `requestId` and validation errors.
 
 ## orchestrator-api (`contracts/orchestrator-api.yaml`)
-- Endpoints: `/healthz`, `/v1/orchestrate`
-- Modes: `chat` (default), `search_only`, `llm_only`.
-- Notes: Response schema allows a free-form `used` object for debug metadata.
+- Endpoints: `/healthz`, `/v1/orchestrate`, `/v1/conversations/upsert`, `/v1/conversations/message`
+- Orchestrate modes: `chat` (default), `no_context`, `llm_only`.
+- Conversations mode (stored per contact): `OFF` or `SUGGEST`.
+- Notes: Response schemas allow a free-form `used` object for debug metadata.
 
 ## web-retriever (`contracts/web-retriever.yaml`)
 - Endpoints: `/healthz`, `/v1/search`

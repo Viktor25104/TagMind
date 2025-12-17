@@ -21,7 +21,7 @@
 
 ## Testing Guidelines
 - Primary check is the smoke script (`scripts/dev-smoke.sh`), which hits all stub endpoints; keep responses deterministic to avoid flakiness.
-- No formal unit test suites yet; if adding, mirror existing request/response contracts and use generated/propagated `X-Request-Id`.
+- Orchestrator now has Postgres-backed integration tests (JUnit + Testcontainers). If adding tests, mirror existing request/response contracts and use generated/propagated `X-Request-Id`.
 - When modifying contracts or behaviors, extend the smoke script accordingly.
 
 ## Commit & Pull Request Guidelines

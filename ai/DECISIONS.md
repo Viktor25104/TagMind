@@ -19,6 +19,18 @@ Reasons:
 - Enables tracing once services begin calling each other.
 - Every service generates an id when absent; bodies always include it.
 
+## Postgres-only persistence for conversations (no in-memory session state)
+Reasons:
+- Conversations MVP requires durable storage for sessions and message history.
+- Postgres is provisioned in local compose and is easy to inspect for debugging.
+- Avoids hidden state in orchestrator instances; keeps behavior reproducible.
+
+## Flyway migrations on startup (single source of DB truth)
+Reasons:
+- No “manual SQL” steps; DB schema is created/updated automatically on boot.
+- Schema changes are versioned and reviewable in git.
+- Works consistently in compose and in Testcontainers-backed integration tests.
+
 ## Deterministic responses until orchestration is wired
 Reasons:
 - Avoids external rate limits and secrets during early development.

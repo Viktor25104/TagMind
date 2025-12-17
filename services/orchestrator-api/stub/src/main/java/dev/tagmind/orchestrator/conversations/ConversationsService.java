@@ -1,18 +1,33 @@
 package dev.tagmind.orchestrator.conversations;
 
 import dev.tagmind.orchestrator.persistence.ConversationMode;
+import dev.tagmind.orchestrator.persistence.ConversationMessageEntity;
+import dev.tagmind.orchestrator.persistence.ConversationMessageRepository;
 import dev.tagmind.orchestrator.persistence.ConversationSessionEntity;
 import dev.tagmind.orchestrator.persistence.ConversationSessionRepository;
+import dev.tagmind.orchestrator.persistence.MessageDirection;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClientException;
+
+import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class ConversationsService {
 
     private final ConversationSessionRepository sessions;
+    private final ConversationMessageRepository messages;
+    private final LlmGatewayClient llm;
 
-    public ConversationsService(ConversationSessionRepository sessions) {
+    public ConversationsService(
+            ConversationSessionRepository sessions,
+            ConversationMessageRepository messages,
+            LlmGatewayClient llm
+    ) {
         this.sessions = sessions;
+        this.messages = messages;
+        this.llm = llm;
     }
 
     @Transactional
@@ -27,5 +42,68 @@ public class ConversationsService {
         session.setMode(mode);
         return sessions.save(session);
     }
-}
 
+    @Transactional
+    public MessageResult handleMessage(String contactId, String messageText, String requestId) {
+        ConversationSessionEntity session = sessions.findByContactId(contactId)
+                .orElseGet(() -> {
+                    ConversationSessionEntity s = new ConversationSessionEntity();
+                    s.setContactId(contactId);
+                    s.setMode(ConversationMode.SUGGEST);
+                    return s;
+                });
+
+        session.touch();
+        session = sessions.save(session);
+
+        ConversationMessageEntity incoming = new ConversationMessageEntity();
+        incoming.setSession(session);
+        incoming.setDirection(MessageDirection.IN);
+        incoming.setMessageText(messageText);
+        incoming.setRequestId(requestId);
+        messages.save(incoming);
+
+        if (session.getMode() == ConversationMode.OFF) {
+            return new MessageResult(
+                    "DO_NOT_RESPOND",
+                    null,
+                    session.getId(),
+                    Map.of(
+                            "mode", session.getMode().name(),
+                            "llmCalled", false
+                    )
+            );
+        }
+
+        String suggestedReply;
+        try {
+            suggestedReply = llm.complete(messageText, requestId).text();
+        } catch (RestClientException ex) {
+            throw ex;
+        }
+
+        ConversationMessageEntity outgoing = new ConversationMessageEntity();
+        outgoing.setSession(session);
+        outgoing.setDirection(MessageDirection.OUT);
+        outgoing.setMessageText(suggestedReply);
+        outgoing.setRequestId(requestId);
+        messages.save(outgoing);
+
+        return new MessageResult(
+                "SUGGEST",
+                suggestedReply,
+                session.getId(),
+                Map.of(
+                        "mode", session.getMode().name(),
+                        "llmCalled", true
+                )
+        );
+    }
+
+    public record MessageResult(
+            String decision,
+            String suggestedReply,
+            UUID sessionId,
+            Map<String, Object> used
+    ) {}
+}

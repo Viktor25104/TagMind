@@ -75,6 +75,30 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /v1/conversations/message:
+    post:
+      tags: [conversations]
+      summary: Store an incoming message and optionally generate a suggested reply
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationsMessageRequest"
+      responses:
+        "200":
+          description: Decision and (optional) suggestion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationsMessageResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   parameters:
     XRequestId:
@@ -202,3 +226,37 @@ components:
           type: string
         mode:
           $ref: "#/components/schemas/ConversationMode"
+
+    ConversationsDecision:
+      type: string
+      enum: [DO_NOT_RESPOND, SUGGEST]
+
+    ConversationsMessageRequest:
+      type: object
+      required: [contactId, message]
+      properties:
+        contactId:
+          type: string
+          example: "tg:12345"
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+
+    ConversationsMessageResponse:
+      type: object
+      required: [requestId, decision, sessionId]
+      properties:
+        requestId:
+          type: string
+        decision:
+          $ref: "#/components/schemas/ConversationsDecision"
+        suggestedReply:
+          type: string
+          nullable: true
+        sessionId:
+          type: string
+          format: uuid
+        used:
+          type: object
+          additionalProperties: true

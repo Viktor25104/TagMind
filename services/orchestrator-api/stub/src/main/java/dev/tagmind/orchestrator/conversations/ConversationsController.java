@@ -5,12 +5,16 @@ import dev.tagmind.orchestrator.persistence.ConversationSessionEntity;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.security.SecureRandom;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Map;
 
@@ -94,5 +98,61 @@ public class ConversationsController {
                         "mode", session.getMode().name()
                 ));
     }
-}
 
+    @PostMapping(
+            value = "/v1/conversations/message",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<Map<String, Object>> message(@RequestBody ConversationMessageRequest body, HttpServletRequest req) {
+        String requestId = getOrCreateRequestId(req);
+        HttpHeaders responseHeaders = new HttpHeaders();
+        responseHeaders.set("X-Request-Id", requestId);
+
+        if (body.contactId() == null || body.contactId().trim().isEmpty()
+                || body.message() == null || body.message().trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .headers(responseHeaders)
+                    .body(Map.of(
+                            "requestId", requestId,
+                            "code", "BAD_REQUEST",
+                            "message", "contactId and message are required"
+                    ));
+        }
+
+        ConversationsService.MessageResult result;
+        try {
+            result = service.handleMessage(body.contactId().trim(), body.message().trim(), requestId);
+        } catch (RestClientResponseException ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .headers(responseHeaders)
+                    .body(Map.of(
+                            "requestId", requestId,
+                            "code", "LLM_ERROR",
+                            "message", "llm-gateway call failed (status=" + ex.getStatusCode().value() + ")"
+                    ));
+        } catch (RestClientException ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .headers(responseHeaders)
+                    .body(Map.of(
+                            "requestId", requestId,
+                            "code", "LLM_ERROR",
+                            "message", "llm-gateway call failed"
+                    ));
+        }
+
+        return ResponseEntity.ok()
+                .headers(responseHeaders)
+                .body(messageResponseBody(requestId, result));
+    }
+
+    private static Map<String, Object> messageResponseBody(String requestId, ConversationsService.MessageResult result) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("requestId", requestId);
+        body.put("decision", result.decision());
+        body.put("suggestedReply", result.suggestedReply());
+        body.put("sessionId", result.sessionId().toString());
+        body.put("used", result.used());
+        return body;
+    }
+}

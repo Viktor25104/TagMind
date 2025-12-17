@@ -10,8 +10,15 @@ Purpose: Telegram edge. Accepts Telegram webhooks (JSON validated only) and prov
 ## orchestrator-api (Java/Spring, `services/orchestrator-api/stub`)
 Purpose: Orchestration surface; calls retriever + llm-gateway stubs with request id propagation.
 - Port: 8082; Ingress: `/orchestrator/...`
-- Endpoints: `GET /healthz`, `POST /v1/orchestrate`
-- Behavior: validates required fields; for modes other than `no_context` it calls web-retriever (max 3 results), converts results to llm citations, and always calls llm-gateway. Retries transient network errors once, applies connect/read timeouts, and falls back to llm-only on retriever failure. Sets `X-Request-Id` header in responses. Downstream URLs are configurable via `RETRIEVER_URL` / `LLM_URL` (compose defaults include service DNS + ports).
+- Endpoints:
+  - `GET /healthz`
+  - `POST /v1/orchestrate`
+  - `POST /v1/conversations/upsert` (create/update session mode for a contact)
+  - `POST /v1/conversations/message` (store IN message; if mode=SUGGEST, call llm-gateway and store OUT message)
+- Behavior:
+  - `/v1/orchestrate`: validates required fields; for modes other than `no_context` it calls web-retriever (max 3 results), converts results to llm citations, and always calls llm-gateway. Retries transient network errors once, applies connect/read timeouts, and falls back to llm-only on retriever failure.
+  - Conversations: persists sessions/messages in Postgres (Flyway migrations on startup). Session mode is `OFF|SUGGEST`; `OFF` returns `DO_NOT_RESPOND` without calling LLM; `SUGGEST` calls llm-gateway and returns/saves a suggested reply.
+  - Sets `X-Request-Id` header in responses. Downstream URLs are configurable via `RETRIEVER_URL` / `LLM_URL` (compose defaults include service DNS + ports).
 - Build: Maven (JDK 21); packaged jar already present in `target/` for the stub.
 
 ## web-retriever (Python/FastAPI, `services/web-retriever/stub`)

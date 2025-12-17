@@ -1,0 +1,16 @@
+# Cross-platform line endings: keep repo consistent
+* text=auto eol=lf
+
+# AI knowledge base must never affect main merges
+ai/** merge=ours
+
+# Better diffs for docs/config
+*.md  text diff
+*.yml text diff
+*.yaml text diff
+*.json text diff
+
+# Reduce noise for lock files (optional)
+*.lock -diff
+go.sum -diff
+Cargo.lock -diff

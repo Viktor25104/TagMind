@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -15,6 +16,8 @@ type AckResponse struct {
 	RequestID string `json:"requestId"`
 	OK        bool   `json:"ok"`
 	Ignored   bool   `json:"ignored,omitempty"`
+	Decision  string `json:"decision,omitempty"`
+	ReplyText string `json:"replyText,omitempty"`
 }
 
 type DevMessageRequest struct {
@@ -28,11 +31,13 @@ type DevMessageResponse struct {
 	RequestID string `json:"requestId"`
 	ContactID string `json:"contactId"`
 	Answer    string `json:"answer"`
+	Decision  string `json:"decision"`
 }
 
 type telegramChatMessage struct {
-	Text    string `json:"text"`
-	Caption string `json:"caption"`
+	Text    string           `json:"text"`
+	Caption string           `json:"caption"`
+	Chat    *telegramChatRef `json:"chat"`
 }
 
 type telegramUpdate struct {
@@ -42,40 +47,50 @@ type telegramUpdate struct {
 	EditedChannelPost *telegramChatMessage `json:"edited_channel_post"`
 }
 
+type telegramChatRef struct {
+	ID   int64  `json:"id"`
+	Type string `json:"type"`
+}
+
 func (u telegramUpdate) text() string {
-	if u.Message != nil {
-		if t := strings.TrimSpace(u.Message.Text); t != "" {
+	if msg := u.primaryMessage(); msg != nil {
+		if t := strings.TrimSpace(msg.Text); t != "" {
 			return t
 		}
-		if c := strings.TrimSpace(u.Message.Caption); c != "" {
-			return c
-		}
-	}
-	if u.EditedMessage != nil {
-		if t := strings.TrimSpace(u.EditedMessage.Text); t != "" {
-			return t
-		}
-		if c := strings.TrimSpace(u.EditedMessage.Caption); c != "" {
-			return c
-		}
-	}
-	if u.ChannelPost != nil {
-		if t := strings.TrimSpace(u.ChannelPost.Text); t != "" {
-			return t
-		}
-		if c := strings.TrimSpace(u.ChannelPost.Caption); c != "" {
-			return c
-		}
-	}
-	if u.EditedChannelPost != nil {
-		if t := strings.TrimSpace(u.EditedChannelPost.Text); t != "" {
-			return t
-		}
-		if c := strings.TrimSpace(u.EditedChannelPost.Caption); c != "" {
+		if c := strings.TrimSpace(msg.Caption); c != "" {
 			return c
 		}
 	}
 	return ""
+}
+
+func (u telegramUpdate) primaryMessage() *telegramChatMessage {
+	switch {
+	case u.Message != nil:
+		return u.Message
+	case u.EditedMessage != nil:
+		return u.EditedMessage
+	case u.ChannelPost != nil:
+		return u.ChannelPost
+	case u.EditedChannelPost != nil:
+		return u.EditedChannelPost
+	default:
+		return nil
+	}
+}
+
+func (u telegramUpdate) chatID() string {
+	if msg := u.primaryMessage(); msg != nil {
+		return msg.chatID()
+	}
+	return ""
+}
+
+func (m *telegramChatMessage) chatID() string {
+	if m == nil || m.Chat == nil {
+		return ""
+	}
+	return strconv.FormatInt(m.Chat.ID, 10)
 }
 
 func newRequestID() string {
@@ -116,6 +131,7 @@ func writeText(w http.ResponseWriter, status int, requestID string, s string) {
 
 func main() {
 	mux := http.NewServeMux()
+	orchestratorClient := newOrchestratorClient()
 
 	// Health
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -167,7 +183,8 @@ func main() {
 			return
 		}
 
-		if _, err := ParseTagCommand(text); err != nil {
+		cmd, err := ParseTagCommand(text)
+		if err != nil {
 			writeJSON(w, http.StatusOK, reqID, AckResponse{
 				RequestID: reqID,
 				OK:        true,
@@ -176,10 +193,49 @@ func main() {
 			return
 		}
 
-		// Phase 4: no orchestration call yet. Just ACK.
+		chatID := update.chatID()
+		if chatID == "" {
+			writeJSON(w, http.StatusOK, reqID, AckResponse{
+				RequestID: reqID,
+				OK:        true,
+				Ignored:   true,
+			})
+			return
+		}
+
+		contactID, err := deriveContactID(chatID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, reqID, map[string]any{
+				"requestId": reqID,
+				"code":      "BAD_REQUEST",
+				"message":   err.Error(),
+			})
+			return
+		}
+
+		tagResp, err := orchestratorClient.sendTagRequest(r.Context(), reqID, TagCommandPayload{
+			ContactID: contactID,
+			Tag:       cmd.Tag,
+			Count:     cmd.Count,
+			Payload:   cmd.Payload,
+			Locale:    "ru-RU",
+			Text:      text,
+		})
+		if err != nil {
+			log.Printf("orchestrator tag call failed (webhook): %v", err)
+			writeJSON(w, http.StatusBadGateway, reqID, map[string]any{
+				"requestId": reqID,
+				"code":      "ORCHESTRATOR_ERROR",
+				"message":   "failed to call orchestrator",
+			})
+			return
+		}
+
 		writeJSON(w, http.StatusOK, reqID, AckResponse{
 			RequestID: reqID,
 			OK:        true,
+			Decision:  tagResp.Decision,
+			ReplyText: tagResp.ReplyText,
 		})
 	})
 
@@ -237,11 +293,30 @@ func main() {
 			return
 		}
 
-		// Phase 4 mock answer (will be replaced with orchestrator call later)
+		locale := normalizeLocale(req.Locale)
+		tagResp, err := orchestratorClient.sendTagRequest(r.Context(), reqID, TagCommandPayload{
+			ContactID: contactID,
+			Tag:       cmd.Tag,
+			Count:     cmd.Count,
+			Payload:   cmd.Payload,
+			Locale:    locale,
+			Text:      req.Text,
+		})
+		if err != nil {
+			log.Printf("orchestrator tag call failed (dev): %v", err)
+			writeJSON(w, http.StatusBadGateway, reqID, map[string]any{
+				"requestId": reqID,
+				"code":      "ORCHESTRATOR_ERROR",
+				"message":   "failed to call orchestrator",
+			})
+			return
+		}
+
 		writeJSON(w, http.StatusOK, reqID, DevMessageResponse{
 			RequestID: reqID,
 			ContactID: contactID,
-			Answer:    "stub: message received for tag " + cmd.Tag + "; orchestration will be added in a later commit",
+			Answer:    tagResp.ReplyText,
+			Decision:  tagResp.Decision,
 		})
 	})
 
@@ -254,4 +329,12 @@ func main() {
 	addr := ":8081"
 	log.Printf("tg-gateway listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, mux))
+}
+
+func normalizeLocale(locale string) string {
+	trimmed := strings.TrimSpace(locale)
+	if trimmed == "" {
+		return "ru-RU"
+	}
+	return trimmed
 }

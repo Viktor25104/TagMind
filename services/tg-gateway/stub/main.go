@@ -14,6 +14,7 @@ import (
 type AckResponse struct {
 	RequestID string `json:"requestId"`
 	OK        bool   `json:"ok"`
+	Ignored   bool   `json:"ignored,omitempty"`
 }
 
 type DevMessageRequest struct {
@@ -26,6 +27,64 @@ type DevMessageRequest struct {
 type DevMessageResponse struct {
 	RequestID string `json:"requestId"`
 	Answer    string `json:"answer"`
+}
+
+type telegramChatMessage struct {
+	Text    string `json:"text"`
+	Caption string `json:"caption"`
+}
+
+type telegramUpdate struct {
+	Message           *telegramChatMessage `json:"message"`
+	EditedMessage     *telegramChatMessage `json:"edited_message"`
+	ChannelPost       *telegramChatMessage `json:"channel_post"`
+	EditedChannelPost *telegramChatMessage `json:"edited_channel_post"`
+}
+
+const tagmindPrefix = "@tagmind"
+
+func (u telegramUpdate) text() string {
+	if u.Message != nil {
+		if t := strings.TrimSpace(u.Message.Text); t != "" {
+			return t
+		}
+		if c := strings.TrimSpace(u.Message.Caption); c != "" {
+			return c
+		}
+	}
+	if u.EditedMessage != nil {
+		if t := strings.TrimSpace(u.EditedMessage.Text); t != "" {
+			return t
+		}
+		if c := strings.TrimSpace(u.EditedMessage.Caption); c != "" {
+			return c
+		}
+	}
+	if u.ChannelPost != nil {
+		if t := strings.TrimSpace(u.ChannelPost.Text); t != "" {
+			return t
+		}
+		if c := strings.TrimSpace(u.ChannelPost.Caption); c != "" {
+			return c
+		}
+	}
+	if u.EditedChannelPost != nil {
+		if t := strings.TrimSpace(u.EditedChannelPost.Text); t != "" {
+			return t
+		}
+		if c := strings.TrimSpace(u.EditedChannelPost.Caption); c != "" {
+			return c
+		}
+	}
+	return ""
+}
+
+func hasTagmindPrefix(raw string) bool {
+	trimmed := strings.TrimLeft(raw, " \t\r\n")
+	if len(trimmed) < len(tagmindPrefix) {
+		return false
+	}
+	return strings.EqualFold(trimmed[:len(tagmindPrefix)], tagmindPrefix)
 }
 
 func newRequestID() string {
@@ -97,13 +156,21 @@ func main() {
 			return
 		}
 
-		// Just ensure it's valid JSON.
-		var anyJSON any
-		if err := json.Unmarshal(body, &anyJSON); err != nil {
+		var update telegramUpdate
+		if err := json.Unmarshal(body, &update); err != nil {
 			writeJSON(w, http.StatusBadRequest, reqID, map[string]any{
 				"requestId": reqID,
 				"code":      "BAD_REQUEST",
 				"message":   "Invalid JSON",
+			})
+			return
+		}
+
+		if !hasTagmindPrefix(update.text()) {
+			writeJSON(w, http.StatusOK, reqID, AckResponse{
+				RequestID: reqID,
+				OK:        true,
+				Ignored:   true,
 			})
 			return
 		}
@@ -149,7 +216,16 @@ func main() {
 			return
 		}
 
-		// Phase 4 mock answer
+		if !hasTagmindPrefix(req.Text) {
+			writeJSON(w, http.StatusOK, reqID, AckResponse{
+				RequestID: reqID,
+				OK:        true,
+				Ignored:   true,
+			})
+			return
+		}
+
+		// Phase 4 mock answer (will be replaced with orchestrator call later)
 		writeJSON(w, http.StatusOK, reqID, DevMessageResponse{
 			RequestID: reqID,
 			Answer:    "stub: message received; orchestration will be added in a later commit",

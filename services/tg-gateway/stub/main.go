@@ -41,8 +41,6 @@ type telegramUpdate struct {
 	EditedChannelPost *telegramChatMessage `json:"edited_channel_post"`
 }
 
-const tagmindPrefix = "@tagmind"
-
 func (u telegramUpdate) text() string {
 	if u.Message != nil {
 		if t := strings.TrimSpace(u.Message.Text); t != "" {
@@ -77,14 +75,6 @@ func (u telegramUpdate) text() string {
 		}
 	}
 	return ""
-}
-
-func hasTagmindPrefix(raw string) bool {
-	trimmed := strings.TrimLeft(raw, " \t\r\n")
-	if len(trimmed) < len(tagmindPrefix) {
-		return false
-	}
-	return strings.EqualFold(trimmed[:len(tagmindPrefix)], tagmindPrefix)
 }
 
 func newRequestID() string {
@@ -166,7 +156,17 @@ func main() {
 			return
 		}
 
-		if !hasTagmindPrefix(update.text()) {
+		text := update.text()
+		if text == "" {
+			writeJSON(w, http.StatusOK, reqID, AckResponse{
+				RequestID: reqID,
+				OK:        true,
+				Ignored:   true,
+			})
+			return
+		}
+
+		if _, err := ParseTagCommand(text); err != nil {
 			writeJSON(w, http.StatusOK, reqID, AckResponse{
 				RequestID: reqID,
 				OK:        true,
@@ -216,7 +216,7 @@ func main() {
 			return
 		}
 
-		if !hasTagmindPrefix(req.Text) {
+		if _, err := ParseTagCommand(req.Text); err != nil {
 			writeJSON(w, http.StatusOK, reqID, AckResponse{
 				RequestID: reqID,
 				OK:        true,

@@ -36,6 +36,14 @@ type orchestratorClient struct {
 	tagURL     string
 }
 
+// newOrchestratorClient creates an orchestratorClient configured with a tag endpoint URL
+// and an HTTP client with sensible timeouts and transport settings.
+//
+// The tag endpoint URL is taken from the ORCHESTRATOR_TAG_URL environment variable if set,
+// otherwise it is constructed from ORCHESTRATOR_URL (or defaults to "http://orchestrator-api:8082")
+// by appending "/v1/conversations/tag". The returned client's HTTP client has a 5s timeout,
+// a transport that uses proxy settings from the environment, a 3s dial timeout, and a 3s TLS
+// handshake timeout.
 func newOrchestratorClient() *orchestratorClient {
 	tagURL := strings.TrimSpace(os.Getenv("ORCHESTRATOR_TAG_URL"))
 	if tagURL == "" {

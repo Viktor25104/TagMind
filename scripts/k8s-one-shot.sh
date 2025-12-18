@@ -6,10 +6,13 @@ MANIFEST_DIR="${ROOT_DIR}/infra/k8s/manifests"
 KIND_CONFIG="${ROOT_DIR}/infra/k8s/kind/kind-config.yaml"
 CLUSTER_NAME="tagmind"
 
+# log prints the given message(s) prefixed with '[k8s]'.
 log() {
   printf '[k8s] %s\n' "$*"
 }
 
+# ensure_cluster ensures a Kind cluster named "tagmind" exists, creating it using KIND_CONFIG if it is missing.
+# Exits with status 1 if the `kind` command is not available.
 ensure_cluster() {
   if ! kind get clusters >/dev/null 2>&1; then
     log "kind not available (kind get clusters failed). Please install kind."
@@ -25,6 +28,7 @@ ensure_cluster() {
   fi
 }
 
+# install_ingress applies the ingress-nginx controller manifest for Kind and waits for the ingress-nginx-controller deployment to finish rolling out.
 install_ingress() {
   log "Applying ingress-nginx controller..."
   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
@@ -32,6 +36,7 @@ install_ingress() {
   kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
 }
 
+# build_and_load_images builds local Docker images for tg-gateway, orchestrator-api, web-retriever, and llm-gateway, tags them with `:local`, and loads them into the Kind cluster identified by `CLUSTER_NAME`.
 build_and_load_images() {
   local services=(
     "tg-gateway services/tg-gateway/Dockerfile"
@@ -51,6 +56,7 @@ build_and_load_images() {
   done
 }
 
+# apply_manifests applies TagMind Kubernetes manifest files from the manifests directory in the required deployment order.
 apply_manifests() {
   log "Applying TagMind Kubernetes manifests..."
   local manifests=(
@@ -68,6 +74,7 @@ apply_manifests() {
   done
 }
 
+# wait_for_deployments waits for core TagMind workloads to become ready by waiting for the postgres statefulset and the tg-gateway, orchestrator-api, web-retriever, and llm-gateway deployments to finish rolling out (180s timeout each).
 wait_for_deployments() {
   log "Waiting for workloads to become ready..."
   log "Waiting for postgres statefulset..."
@@ -77,6 +84,7 @@ wait_for_deployments() {
   done
 }
 
+# verify_ingress verifies that each configured ingress host responds successfully to /healthz when requested via localhost:8080 with the appropriate Host header.
 verify_ingress() {
   log "Verifying ingress endpoints..."
   local hosts=(
@@ -95,6 +103,7 @@ verify_ingress() {
   done
 }
 
+# print_summary prints a brief readiness summary with commands to check pods, perform ingress health checks, and delete the TagMind Kind cluster.
 print_summary() {
   cat <<'EOF'
 === TagMind kind deployment is ready ===

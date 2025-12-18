@@ -32,6 +32,9 @@ type TagCommand struct {
 	Payload string
 }
 
+// ParseTagCommand parses an input string that begins with the "@tagmind" prefix into a TagCommand.
+// It validates the prefix, extracts the tag (lowercased), an optional bracketed count `[n]`, and the remaining payload.
+// Returns ErrNoTagmindPrefix, ErrMissingTag, ErrUnknownTag, or ErrInvalidCount for the corresponding validation failures.
 func ParseTagCommand(input string) (*TagCommand, error) {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -68,6 +71,9 @@ func ParseTagCommand(input string) (*TagCommand, error) {
 	}, nil
 }
 
+// parseTag extracts a contiguous sequence of ASCII letters from the start of input
+// and returns that sequence lowercased along with the remaining suffix.
+// If the input does not begin with a letter, it returns ErrMissingTag.
 func parseTag(input string) (string, string, error) {
 	end := 0
 	for end < len(input) {
@@ -87,6 +93,13 @@ func parseTag(input string) (string, string, error) {
 	return tag, input[end:], nil
 }
 
+// parseCountAndPayload parses an optional bracketed positive integer count and the remaining payload from input.
+// If input begins with `[n]` where `n` is one or more ASCII digits greater than zero, the function returns a pointer
+// to that integer and the payload that follows. If no bracketed count is present, it returns a nil count pointer and
+// the entire trimmed input as the payload. Leading whitespace is ignored and a single optional colon immediately after
+// the count (or at the start if no count) is removed before trimming the payload.
+// Returns ErrInvalidCount when the bracketed count is malformed: missing closing `]`, empty content, non-digit characters,
+// or a value that cannot be parsed as an integer greater than zero.
 func parseCountAndPayload(input string) (*int, string, error) {
 	rest := strings.TrimLeft(input, " \t")
 	var countPtr *int

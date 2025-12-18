@@ -49,6 +49,15 @@ class ConversationsTagIT {
     static final HttpServer llmStub = startLlmStub();
     static final HttpServer retrieverStub = startRetrieverStub();
 
+    /**
+     * Register test runtime properties for the Spring datasource and external service endpoints.
+     *
+     * Adds the JDBC URL, username, and password from the PostgreSQL Testcontainer to the given
+     * DynamicPropertyRegistry and sets the system properties `LLM_URL` and `RETRIEVER_URL` to the
+     * in-process stub servers' endpoints used by the tests.
+     *
+     * @param registry the dynamic property registry to receive datasource properties
+     */
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
@@ -58,6 +67,9 @@ class ConversationsTagIT {
         System.setProperty("RETRIEVER_URL", "http://127.0.0.1:" + retrieverStub.getAddress().getPort() + "/v1/search");
     }
 
+    /**
+     * Stops the in-process LLM and retriever HTTP stub servers and removes their system property URLs.
+     */
     @AfterAll
     static void shutdown() {
         llmStub.stop(0);
@@ -113,6 +125,13 @@ class ConversationsTagIT {
                 .andExpect(jsonPath("$.tag").value("help"));
     }
 
+    /**
+     * Verifies that the "recap" tag returns the most recent conversation messages in chronological order and honors the requested history limit.
+     *
+     * Sets up a session with alternating IN/OUT messages, sends a recap request with count 3, and asserts that the response reports the history limit and used count, that the returned history is ordered as expected, and that the generated reply text matches the LLM stub.
+     *
+     * @throws Exception if an error occurs while performing the HTTP request or evaluating the response
+     */
     @Test
     void tag_recap_fetchesHistoryChronologically() throws Exception {
         ConversationSessionEntity session = new ConversationSessionEntity();
@@ -206,6 +225,15 @@ class ConversationsTagIT {
         }
     }
 
+    /**
+     * Creates and persists a ConversationMessageEntity for the given session with the specified direction and text.
+     *
+     * The persisted message is assigned a generated requestId.
+     *
+     * @param session   the conversation session to associate the message with
+     * @param direction the message direction (IN or OUT)
+     * @param text      the message text to store
+     */
     private void storeMessage(ConversationSessionEntity session, MessageDirection direction, String text) {
         ConversationMessageEntity message = new ConversationMessageEntity();
         message.setSession(session);
@@ -215,6 +243,11 @@ class ConversationsTagIT {
         messages.save(message);
     }
 
+    /**
+     * Starts an in-process HTTP stub that serves the LLM completion endpoint at /v1/complete on localhost.
+     *
+     * @return the started HttpServer bound to localhost on an ephemeral port
+     */
     private static HttpServer startLlmStub() {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -226,6 +259,17 @@ class ConversationsTagIT {
         }
     }
 
+    /**
+     * Handles HTTP requests for the stubbed LLM completion endpoint and returns a fixed completion JSON.
+     *
+     * <p>Accepts only POST requests; other methods receive 405. Reads the incoming "X-Request-Id"
+     * header (falls back to "req_tag_stub" when absent or blank), echoes it in the response header,
+     * and returns a 200 response body containing `requestId`, `text` set to "tag-response", and a
+     * `usage` object indicating the response is a stub.</p>
+     *
+     * @param exchange the HTTP exchange representing the request and response
+     * @throws IOException if an I/O error occurs while reading or writing the exchange
+     */
     private static void handleComplete(HttpExchange exchange) throws IOException {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             exchange.sendResponseHeaders(405, -1);
@@ -245,10 +289,21 @@ class ConversationsTagIT {
         exchange.close();
     }
 
+    /**
+     * Escape a Java string and wrap it as a JSON string literal.
+     *
+     * @param s the input string to convert; may contain quotes or backslashes
+     * @return the JSON string literal representing the input (surrounded by double quotes, with backslashes and quotes escaped)
+     */
     private static String jsonString(String s) {
         return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
+    /**
+     * Starts an in-process HTTP stub that handles retriever search requests at the "/v1/search" path on localhost.
+     *
+     * @return an active HttpServer bound to an ephemeral port with the "/v1/search" context registered
+     */
     private static HttpServer startRetrieverStub() {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -260,6 +315,17 @@ class ConversationsTagIT {
         }
     }
 
+    /**
+     * HTTP handler that responds to retriever search requests with a fixed two-result JSON payload.
+     *
+     * <p>Accepts only POST requests; for non-POST methods it sends a 405 response. It reads the
+     * `X-Request-Id` request header and echoes it back (or uses `req_retriever_stub` when missing),
+     * sets `Content-Type: application/json; charset=utf-8`, and returns a 200 response containing a
+     * JSON object with the `requestId` and two predefined search result entries.</p>
+     *
+     * @param exchange the HTTP exchange representing the incoming request and outgoing response
+     * @throws IOException if an I/O error occurs while sending the response
+     */
     private static void handleSearch(HttpExchange exchange) throws IOException {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             exchange.sendResponseHeaders(405, -1);

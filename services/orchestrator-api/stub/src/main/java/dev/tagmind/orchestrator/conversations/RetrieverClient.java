@@ -25,6 +25,11 @@ public class RetrieverClient {
     private final RestTemplate restTemplate;
     private final String retrieverUrl;
 
+    /**
+     * Initializes the RetrieverClient, configuring the HTTP client timeouts and determining the retriever service URL.
+     *
+     * The retriever URL is resolved in this order: environment variable `RETRIEVER_URL` (if present and non-empty), system property `RETRIEVER_URL` (if present and non-empty), otherwise the default `"http://web-retriever/v1/search"`.
+     */
     public RetrieverClient() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(CONNECT_TIMEOUT);
@@ -41,6 +46,16 @@ public class RetrieverClient {
         }
     }
 
+    /**
+     * Perform a search against the configured retriever service.
+     *
+     * @param query     the search query string
+     * @param locale    BCP 47 language tag to constrain results (e.g., "en-US")
+     * @param maxResults maximum number of results to request
+     * @param requestId id to propagate to the retriever service via the `X-Request-Id` header
+     * @return the parsed RetrieverResponse from the retriever service, or `null` if the response contained no body
+     * @throws RestClientException if the HTTP request fails or the response cannot be processed
+     */
     public RetrieverResponse search(String query, String locale, int maxResults, String requestId) throws RestClientException {
         Map<String, Object> payload = new HashMap<>();
         payload.put("query", query);

@@ -150,6 +150,20 @@ public class ConversationsController {
                 .body(messageResponseBody(requestId, result));
     }
 
+    /**
+     * Constructs a response body map representing the outcome of processing a conversation message.
+     *
+     * @param requestId the request identifier to include in the response
+     * @param result    the message handling result whose fields populate the response
+     * @return a map with the following entries:
+     *         <ul>
+     *           <li>`requestId` — the provided requestId (String)</li>
+     *           <li>`decision` — the decision value from {@code result.decision()}</li>
+     *           <li>`suggestedReply` — the suggested reply from {@code result.suggestedReply()}</li>
+     *           <li>`sessionId` — the session id from {@code result.sessionId().toString()} (String)</li>
+     *           <li>`used` — the usage/metadata value from {@code result.used()}</li>
+     *         </ul>
+     */
     private static Map<String, Object> messageResponseBody(String requestId, ConversationsService.MessageResult result) {
         Map<String, Object> body = new HashMap<>();
         body.put("requestId", requestId);
@@ -160,6 +174,21 @@ public class ConversationsController {
         return body;
     }
 
+    /**
+     * Handles a tag action for a conversation: validates input, delegates to the service, and returns the tagging decision and reply.
+     *
+     * Expected fields on the request body:
+     * - contactId: required contact identifier.
+     * - tag: required tag name; must be one of the controller's supported tags.
+     * - count: optional positive integer.
+     * - payload: optional auxiliary string.
+     * - locale: optional locale string, defaults to "ru-RU" when missing or empty.
+     * - text: optional text associated with the tag.
+     *
+     * @param body the incoming tag request containing contactId, tag, and optional parameters described above
+     * @param req  the servlet request (used to read or generate the X-Request-Id header)
+     * @return a map with keys "requestId", "decision", "replyText", "sessionId", "contactId", "tag", and "used" describing the outcome of the tag operation
+     */
     @PostMapping(
             value = "/v1/conversations/tag",
             consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -216,6 +245,14 @@ public class ConversationsController {
                 ));
     }
 
+    /**
+     * Builds a 400 Bad Request response with a standardized error payload.
+     *
+     * @param headers   HTTP headers to include in the response
+     * @param requestId request identifier to include in the payload
+     * @param message   human-readable error message explaining the bad request
+     * @return a ResponseEntity with status 400 and a body containing `requestId`, `code` set to `"BAD_REQUEST"`, and `message`
+     */
     private ResponseEntity<Map<String, Object>> badRequest(HttpHeaders headers, String requestId, String message) {
         return ResponseEntity.badRequest()
                 .headers(headers)
@@ -226,6 +263,15 @@ public class ConversationsController {
                 ));
     }
 
+    /**
+     * Build an HTTP 500 response containing a standardized upstream error payload and the given headers.
+     *
+     * @param headers   HTTP headers to include in the response
+     * @param requestId request identifier to include in the response body
+     * @param code      machine-readable error code to include in the response body
+     * @param message   human-readable error message to include in the response body
+     * @return          a ResponseEntity with status 500 containing a JSON body with keys `requestId`, `code`, and `message`
+     */
     private ResponseEntity<Map<String, Object>> upstreamError(HttpHeaders headers, String requestId, String code, String message) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .headers(headers)

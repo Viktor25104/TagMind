@@ -93,6 +93,8 @@ func (m *telegramChatMessage) chatID() string {
 	return strconv.FormatInt(m.Chat.ID, 10)
 }
 
+// newRequestID returns a short unique identifier string for requests.
+// The value is prefixed with "req_"; it is generated from random bytes when available and falls back to a timestamp-based value if randomness cannot be obtained.
 func newRequestID() string {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err == nil {
@@ -129,6 +131,8 @@ func writeText(w http.ResponseWriter, status int, requestID string, s string) {
 	}
 }
 
+// main starts the tg-gateway HTTP server and registers handlers for health checks,
+// Telegram webhook ingestion, and a developer message simulation endpoint. The webhook handler accepts Telegram updates, extracts and processes tag commands (ignoring non-relevant updates), forwards valid requests to the orchestrator, and returns acknowledgements; the dev endpoint accepts synthetic messages, forwards them to the orchestrator, and returns simulated responses.
 func main() {
 	mux := http.NewServeMux()
 	orchestratorClient := newOrchestratorClient()
@@ -331,6 +335,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
+// normalizeLocale trims surrounding whitespace from the provided locale and defaults to "ru-RU" when the trimmed value is empty.
 func normalizeLocale(locale string) string {
 	trimmed := strings.TrimSpace(locale)
 	if trimmed == "" {

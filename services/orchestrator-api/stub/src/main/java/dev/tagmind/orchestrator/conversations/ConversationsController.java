@@ -189,10 +189,29 @@ public class ConversationsController {
             return badRequest(responseHeaders, requestId, "count must be positive");
         }
 
-        ConversationsService.TagResult result = service.handleTag(
-                new ConversationsService.TagInput(contactId, tag, count, payload, locale),
-                requestId
-        );
+        ConversationsService.TagResult result;
+        try {
+            result = service.handleTag(
+                    new ConversationsService.TagInput(contactId, tag, count, payload, locale),
+                    requestId
+            );
+        } catch (RestClientResponseException ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .headers(responseHeaders)
+                    .body(Map.of(
+                            "requestId", requestId,
+                            "code", "LLM_ERROR",
+                            "message", "llm-gateway call failed (status=" + ex.getStatusCode().value() + ")"
+                    ));
+        } catch (RestClientException ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .headers(responseHeaders)
+                    .body(Map.of(
+                            "requestId", requestId,
+                            "code", "LLM_ERROR",
+                            "message", "llm-gateway call failed"
+                    ));
+        }
 
         Map<String, Object> bodyMap = new HashMap<>();
         bodyMap.put("requestId", requestId);

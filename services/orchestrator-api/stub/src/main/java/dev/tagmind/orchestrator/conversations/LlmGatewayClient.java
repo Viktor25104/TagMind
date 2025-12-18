@@ -35,10 +35,11 @@ public class LlmGatewayClient {
         }
     }
 
-    public LlmResponse complete(String prompt, String requestId) throws RestClientException {
+    public LlmResponse complete(String prompt, String locale, String requestId) throws RestClientException {
         Map<String, Object> payload = new HashMap<>();
         payload.put("prompt", prompt);
-        payload.put("locale", "ru-RU");
+        String effectiveLocale = (locale == null || locale.trim().isEmpty()) ? "ru-RU" : locale.trim();
+        payload.put("locale", effectiveLocale);
         payload.put("model", "stub");
 
         HttpHeaders headers = new HttpHeaders();
@@ -57,6 +58,10 @@ public class LlmGatewayClient {
             throw new RestClientException("llm-gateway response missing body");
         }
         return body;
+    }
+
+    public LlmResponse complete(String prompt, String requestId) throws RestClientException {
+        return complete(prompt, "ru-RU", requestId);
     }
 
     public record LlmResponse(String requestId, String text, Map<String, Object> usage) {}

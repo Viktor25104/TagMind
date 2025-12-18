@@ -25,15 +25,18 @@ public class ConversationsService {
     private final ConversationSessionRepository sessions;
     private final ConversationMessageRepository messages;
     private final LlmGatewayClient llm;
+    private final TagPromptBuilder prompts;
 
     public ConversationsService(
             ConversationSessionRepository sessions,
             ConversationMessageRepository messages,
-            LlmGatewayClient llm
+            LlmGatewayClient llm,
+            TagPromptBuilder prompts
     ) {
         this.sessions = sessions;
         this.messages = messages;
         this.llm = llm;
+        this.prompts = prompts;
     }
 
     @Transactional
@@ -119,21 +122,28 @@ public class ConversationsService {
         session = sessions.save(session);
 
         HistoryResult historyResult = fetchHistoryIfNeeded(session, input);
+        TagPromptBuilder.TagPrompt prompt = prompts.build(input, historyResult.entries());
+
+        LlmGatewayClient.LlmResponse llmResponse = llm.complete(prompt.prompt(), input.locale(), requestId);
 
         Map<String, Object> used = new HashMap<>();
         used.put("tag", input.tag());
         used.put("locale", input.locale());
         used.put("requestedCount", input.count());
-        used.put("historyUsed", historyResult.history().size());
-        used.put("implemented", false);
-        if (!historyResult.history().isEmpty()) {
+        used.put("historyUsed", historyResult.entries().size());
+        used.put("llmCalled", true);
+        used.put("promptType", prompt.type());
+        used.put("promptTokens", prompt.tokenEstimate());
+        used.put("implemented", true);
+        used.putAll(prompt.debug());
+        if (!historyResult.entries().isEmpty()) {
             used.put("historyLimit", historyResult.limit());
-            used.put("history", historyResult.history());
+            used.put("history", historyResult.asDebugHistory());
         }
 
         return new TagResult(
-                "DO_NOT_RESPOND",
-                null,
+                "RESPOND",
+                llmResponse.text(),
                 session.getId(),
                 session.getContactId(),
                 input.tag(),
@@ -153,11 +163,11 @@ public class ConversationsService {
         }
         List<ConversationMessageEntity> copy = new ArrayList<>(latest);
         Collections.reverse(copy);
-        List<Map<String, Object>> history = copy.stream()
-                .map(msg -> Map.<String, Object>of(
-                        "direction", msg.getDirection().name(),
-                        "text", msg.getMessageText(),
-                        "createdAt", msg.getCreatedAt().toString()
+        List<TagPromptBuilder.HistoryEntry> history = copy.stream()
+                .map(msg -> new TagPromptBuilder.HistoryEntry(
+                        msg.getDirection().name(),
+                        msg.getMessageText(),
+                        msg.getCreatedAt().toString()
                 ))
                 .toList();
         return new HistoryResult(limit, history);
@@ -203,5 +213,15 @@ public class ConversationsService {
             String locale
     ) {}
 
-    private record HistoryResult(int limit, List<Map<String, Object>> history) {}
+    private record HistoryResult(int limit, List<TagPromptBuilder.HistoryEntry> entries) {
+        List<Map<String, Object>> asDebugHistory() {
+            return entries.stream()
+                    .map(entry -> Map.<String, Object>of(
+                            "direction", entry.direction(),
+                            "text", entry.text(),
+                            "createdAt", entry.createdAt()
+                    ))
+                    .toList();
+        }
+    }
 }

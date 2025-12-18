@@ -100,10 +100,55 @@ public class ConversationsService {
         );
     }
 
+    @Transactional
+    public TagResult handleTag(TagInput input, String requestId) {
+        ConversationSessionEntity session = sessions.findByContactId(input.contactId())
+                .orElseGet(() -> {
+                    ConversationSessionEntity s = new ConversationSessionEntity();
+                    s.setContactId(input.contactId());
+                    s.setMode(ConversationMode.SUGGEST);
+                    return s;
+                });
+        session.touch();
+        session = sessions.save(session);
+
+        Map<String, Object> used = Map.of(
+                "tag", input.tag(),
+                "count", input.count(),
+                "implemented", false
+        );
+
+        return new TagResult(
+                "DO_NOT_RESPOND",
+                null,
+                session.getId(),
+                session.getContactId(),
+                input.tag(),
+                used
+        );
+    }
+
     public record MessageResult(
             String decision,
             String suggestedReply,
             UUID sessionId,
             Map<String, Object> used
+    ) {}
+
+    public record TagResult(
+            String decision,
+            String replyText,
+            UUID sessionId,
+            String contactId,
+            String tag,
+            Map<String, Object> used
+    ) {}
+
+    public record TagInput(
+            String contactId,
+            String tag,
+            Integer count,
+            String payload,
+            String locale
     ) {}
 }

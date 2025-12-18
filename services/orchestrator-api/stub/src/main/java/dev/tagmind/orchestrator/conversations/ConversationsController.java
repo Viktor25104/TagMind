@@ -17,12 +17,16 @@ import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 public class ConversationsController {
 
     private static final SecureRandom RNG = new SecureRandom();
     private static final HexFormat HEX = HexFormat.of();
+    private static final Set<String> SUPPORTED_TAGS = Set.of(
+            "help", "llm", "web", "recap", "judge", "fix", "plan", "safe"
+    );
 
     private final ConversationsService service;
 
@@ -154,5 +158,63 @@ public class ConversationsController {
         body.put("sessionId", result.sessionId().toString());
         body.put("used", result.used());
         return body;
+    }
+
+    @PostMapping(
+            value = "/v1/conversations/tag",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<Map<String, Object>> tag(@RequestBody TagRequest body, HttpServletRequest req) {
+        String requestId = getOrCreateRequestId(req);
+        HttpHeaders responseHeaders = new HttpHeaders();
+        responseHeaders.set("X-Request-Id", requestId);
+
+        String contactId = body.contactId() == null ? "" : body.contactId().trim();
+        String tag = body.tag() == null ? "" : body.tag().trim().toLowerCase();
+        Integer count = body.count();
+        String payload = body.payload() == null ? null : body.payload().trim();
+        String locale = body.locale() == null || body.locale().trim().isEmpty() ? "ru-RU" : body.locale().trim();
+
+        if (contactId.isEmpty()) {
+            return badRequest(responseHeaders, requestId, "contactId is required");
+        }
+        if (tag.isEmpty()) {
+            return badRequest(responseHeaders, requestId, "tag is required");
+        }
+        if (!SUPPORTED_TAGS.contains(tag)) {
+            return badRequest(responseHeaders, requestId, "tag is not supported");
+        }
+        if (count != null && count <= 0) {
+            return badRequest(responseHeaders, requestId, "count must be positive");
+        }
+
+        ConversationsService.TagResult result = service.handleTag(
+                new ConversationsService.TagInput(contactId, tag, count, payload, locale),
+                requestId
+        );
+
+        Map<String, Object> bodyMap = new HashMap<>();
+        bodyMap.put("requestId", requestId);
+        bodyMap.put("decision", result.decision());
+        bodyMap.put("replyText", result.replyText());
+        bodyMap.put("sessionId", result.sessionId().toString());
+        bodyMap.put("contactId", result.contactId());
+        bodyMap.put("tag", result.tag());
+        bodyMap.put("used", result.used());
+
+        return ResponseEntity.ok()
+                .headers(responseHeaders)
+                .body(bodyMap);
+    }
+
+    private ResponseEntity<Map<String, Object>> badRequest(HttpHeaders headers, String requestId, String message) {
+        return ResponseEntity.badRequest()
+                .headers(headers)
+                .body(Map.of(
+                        "requestId", requestId,
+                        "code", "BAD_REQUEST",
+                        "message", message
+                ));
     }
 }

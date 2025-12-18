@@ -5,5 +5,6 @@ public record TagRequest(
         String tag,
         Integer count,
         String payload,
-        String locale
+        String locale,
+        String text
 ) {}

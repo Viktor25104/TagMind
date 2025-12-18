@@ -14,18 +14,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -73,6 +75,9 @@ class ConversationsTagIT {
     @Autowired
     ConversationMessageRepository messages;
 
+    @Autowired
+    JdbcTemplate jdbc;
+
     @Test
     void tag_requiresContactId() throws Exception {
         mvc.perform(post("/v1/conversations/tag")
@@ -100,7 +105,7 @@ class ConversationsTagIT {
         mvc.perform(post("/v1/conversations/tag")
                         .contentType("application/json")
                         .content("""
-                                {"contactId":"tg:test","tag":"help","payload":"ping"}
+                                {"contactId":"tg:test","tag":"help","payload":"ping","text":"@tagmind help: ping"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.decision").value("RESPOND"))
@@ -123,7 +128,7 @@ class ConversationsTagIT {
         mvc.perform(post("/v1/conversations/tag")
                         .contentType("application/json")
                         .content("""
-                                {"contactId":"tg:history","tag":"recap","count":3}
+                                {"contactId":"tg:history","tag":"recap","count":3,"text":"@tagmind recap[3]:"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.used.historyLimit").value(3))
@@ -138,12 +143,47 @@ class ConversationsTagIT {
         mvc.perform(post("/v1/conversations/tag")
                         .contentType("application/json")
                         .content("""
-                                {"contactId":"tg:web","tag":"web","payload":"Новости ИИ"}
+                                {"contactId":"tg:web","tag":"web","payload":"Новости ИИ","text":"@tagmind web: Новости ИИ"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.used.retrieverUsed").value(true))
                 .andExpect(jsonPath("$.used.citationsCount").value(2))
                 .andExpect(jsonPath("$.replyText").value("tag-response"));
+    }
+
+    @Test
+    void tag_persistsInOutMessages() throws Exception {
+        mvc.perform(post("/v1/conversations/tag")
+                        .contentType("application/json")
+                        .content("""
+                                {"contactId":"tg:persist","tag":"help","payload":"hi","text":"@tagmind help: hi"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.decision").value("RESPOND"));
+
+        ConversationSessionEntity session = sessions.findByContactId("tg:persist").orElseThrow();
+        List<Map<String, Object>> rows = jdbc.query(
+                """
+                        select m.direction, m.message_text
+                        from conversation_messages m
+                        where m.session_id=?
+                        order by m.created_at asc
+                        """,
+                (rs, rowNum) -> Map.of(
+                        "direction", rs.getString(1),
+                        "text", rs.getString(2)
+                ),
+                session.getId()
+        );
+        if (rows.size() != 2) {
+            throw new AssertionError("expected 2 messages, got " + rows.size());
+        }
+        if (!"IN".equals(rows.get(0).get("direction")) || !"@tagmind help: hi".equals(rows.get(0).get("text"))) {
+            throw new AssertionError("unexpected IN message: " + rows.get(0));
+        }
+        if (!"OUT".equals(rows.get(1).get("direction")) || !"tag-response".equals(rows.get(1).get("text"))) {
+            throw new AssertionError("unexpected OUT message: " + rows.get(1));
+        }
     }
 
     private void storeMessage(ConversationSessionEntity session, MessageDirection direction, String text) {

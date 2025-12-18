@@ -125,6 +125,9 @@ public class ConversationsService {
         session = sessions.save(session);
 
         HistoryResult historyResult = fetchHistoryIfNeeded(session, input);
+        String incomingText = resolveIncomingText(input);
+        persistMessage(session, MessageDirection.IN, incomingText, requestId);
+
         RetrieverContext retrieverContext = maybeCallRetriever(input, requestId);
         TagPromptBuilder.TagPrompt prompt = prompts.build(input, historyResult.entries(), retrieverContext.results());
 
@@ -149,6 +152,8 @@ public class ConversationsService {
         if (!retrieverContext.results().isEmpty()) {
             used.put("citations", retrieverContext.results());
         }
+
+        persistMessage(session, MessageDirection.OUT, llmResponse.text(), requestId);
 
         return new TagResult(
                 "RESPOND",
@@ -245,7 +250,8 @@ public class ConversationsService {
             String tag,
             Integer count,
             String payload,
-            String locale
+            String locale,
+            String text
     ) {}
 
     private record HistoryResult(int limit, List<TagPromptBuilder.HistoryEntry> entries) {
@@ -261,4 +267,27 @@ public class ConversationsService {
     }
 
     private record RetrieverContext(boolean used, List<Map<String, Object>> results) {}
+
+    private void persistMessage(ConversationSessionEntity session, MessageDirection direction, String text, String requestId) {
+        ConversationMessageEntity message = new ConversationMessageEntity();
+        message.setSession(session);
+        message.setDirection(direction);
+        message.setMessageText(text);
+        message.setRequestId(requestId);
+        messages.save(message);
+    }
+
+    private String resolveIncomingText(TagInput input) {
+        if (input.text() != null && !input.text().trim().isEmpty()) {
+            return input.text().trim();
+        }
+        StringBuilder sb = new StringBuilder("@tagmind ").append(input.tag());
+        if (input.count() != null && input.count() > 0) {
+            sb.append("[").append(input.count()).append("]");
+        }
+        if (input.payload() != null && !input.payload().trim().isEmpty()) {
+            sb.append(": ").append(input.payload().trim());
+        }
+        return sb.toString();
+    }
 }

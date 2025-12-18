@@ -189,10 +189,12 @@ public class ConversationsController {
             return badRequest(responseHeaders, requestId, "count must be positive");
         }
 
+        String text = body.text() == null ? null : body.text().trim();
+
         ConversationsService.TagResult result;
         try {
             result = service.handleTag(
-                    new ConversationsService.TagInput(contactId, tag, count, payload, locale),
+                    new ConversationsService.TagInput(contactId, tag, count, payload, locale, text),
                     requestId
             );
         } catch (RestClientResponseException ex) {

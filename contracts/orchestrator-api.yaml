@@ -314,6 +314,9 @@ components:
         locale:
           type: string
           example: "ru-RU"
+        text:
+          type: string
+          description: Original message text as received from the client (before parsing).
 
     TagResponse:
       type: object

@@ -17,20 +17,24 @@ echo "Fetching..."
 git fetch origin "$AGENT_BRANCH":"$AGENT_BRANCH" >/dev/null 2>&1 || git fetch origin
 
 echo "Merging $AGENT_BRANCH into main (no commit yet)..."
-git merge --no-ff --no-commit "$AGENT_BRANCH"
 
-# Remove ai/ changes from index and workspace (ai must never land in main)
-if git ls-files --error-unmatch ai >/dev/null 2>&1; then
-  echo "Removing tracked ai/ from main..."
-  git rm -r --cached ai >/dev/null 2>&1 || true
-fi
+git merge --no-ff --no-commit "$AGENT_BRANCH" || true
 
-echo "Dropping ai/ content from staging/worktree..."
-git restore --staged ai 2>/dev/null || true
-git checkout -- ai 2>/dev/null || true
+echo "Enforcing ignorance of 'ai/' folder..."
+
+git rm -rf ai >/dev/null 2>&1 || true
+
 rm -rf ai 2>/dev/null || true
 
-echo "Ready to commit merge. Review staged changes:"
+if git diff --name-only --diff-filter=U | grep -q .; then
+  echo "ERROR: Real conflicts detected outside of 'ai/' folder!"
+  echo "Please resolve them manually:"
+  git status
+  exit 1
+fi
+
+echo "Ready to commit merge. 'ai/' has been excluded."
+echo "Staged changes:"
 git diff --cached --name-only
 echo ""
 echo "If OK: run -> git commit"

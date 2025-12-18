@@ -53,15 +53,45 @@ build_and_load_images() {
 
 apply_manifests() {
   log "Applying TagMind Kubernetes manifests..."
-  for manifest in 00-namespace.yaml 01-configmap.yaml 02-secrets.example.yaml 03-deployments.yaml 04-services.yaml 05-ingress.yaml 06-networkpolicy.yaml; do
+  local manifests=(
+    00-namespace.yaml
+    01-configmap.yaml
+    02-secrets.yaml
+    03-deployments.yaml
+    04-services.yaml
+    05-ingress.yaml
+    06-networkpolicy.yaml
+    07-postgres.yaml
+  )
+  for manifest in "${manifests[@]}"; do
     kubectl apply -f "${MANIFEST_DIR}/${manifest}"
   done
 }
 
 wait_for_deployments() {
   log "Waiting for workloads to become ready..."
+  log "Waiting for postgres statefulset..."
+  kubectl -n tagmind rollout status statefulset/postgres --timeout=180s
   for deploy in tg-gateway orchestrator-api web-retriever llm-gateway; do
     kubectl -n tagmind rollout status "deployment/${deploy}" --timeout=180s
+  done
+}
+
+verify_ingress() {
+  log "Verifying ingress endpoints..."
+  local hosts=(
+    tg.tagmind.local
+    orchestrator.tagmind.local
+    retriever.tagmind.local
+    llm.tagmind.local
+  )
+  for host in "${hosts[@]}"; do
+    local url="http://localhost:8080/healthz"
+    if ! curl -fsS -H "Host: ${host}" "${url}" >/dev/null; then
+      log "Ingress health check failed for host ${host} (${url})"
+      exit 1
+    fi
+    log "ok: ${host} -> ${url}"
   done
 }
 
@@ -72,11 +102,11 @@ print_summary() {
 Check component status:
   kubectl -n tagmind get pods
 
-Ingress endpoints (requires /etc/hosts entry "127.0.0.1 tagmind.local"):
-  curl -H 'Host: tagmind.local' http://localhost:8080/tg/healthz
-  curl -H 'Host: tagmind.local' http://localhost:8080/orchestrator/healthz
-  curl -H 'Host: tagmind.local' http://localhost:8080/retriever/healthz
-  curl -H 'Host: tagmind.local' http://localhost:8080/llm/healthz
+Ingress endpoints (requires /etc/hosts entries for *.tagmind.local -> 127.0.0.1):
+  curl -H 'Host: tg.tagmind.local' http://localhost:8080/healthz
+  curl -H 'Host: orchestrator.tagmind.local' http://localhost:8080/healthz
+  curl -H 'Host: retriever.tagmind.local' http://localhost:8080/healthz
+  curl -H 'Host: llm.tagmind.local' http://localhost:8080/healthz
 
 To remove everything:
   kind delete cluster --name tagmind
@@ -88,4 +118,5 @@ install_ingress
 build_and_load_images
 apply_manifests
 wait_for_deployments
+verify_ingress
 print_summary

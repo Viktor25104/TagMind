@@ -44,10 +44,28 @@ curl -sS -H "X-Request-Id: ${req_id}" http://localhost:8083/healthz | grep -q "o
 curl -sS -H "X-Request-Id: ${req_id}" http://localhost:8084/healthz | grep -q "ok"
 echo "ok"
 
-echo "[2/9] tg-gateway dev message..."
+echo "[2/9] tg-gateway dev message (help)..."
 curl -sS -H "Content-Type: application/json" -H "X-Request-Id: ${req_id}" \
   -d '{"userId":"tg:1","chatId":"tg_chat:1","text":"@tagmind help: hi"}' \
   http://localhost:8081/v1/tg/dev/message | jq -e '.requestId and (.answer | contains("completion generated")) and .contactId=="tg:tg_chat:1" and .decision=="RESPOND"' >/dev/null
+echo "ok"
+
+echo "[2/9] tg-gateway dev message (llm)..."
+curl -sS -H "Content-Type: application/json" -H "X-Request-Id: ${req_id}" \
+  -d '{"userId":"tg:1","chatId":"tg_chat:1","text":"@tagmind llm: привет"}' \
+  http://localhost:8081/v1/tg/dev/message | jq -e '.decision=="RESPOND" and (.answer | contains("completion generated"))' >/dev/null
+echo "ok"
+
+echo "[2/9] tg-gateway dev message (web)..."
+curl -sS -H "Content-Type: application/json" -H "X-Request-Id: ${req_id}" \
+  -d '{"userId":"tg:1","chatId":"tg_chat:1","text":"@tagmind web: новости"}' \
+  http://localhost:8081/v1/tg/dev/message | jq -e '.decision=="RESPOND" and (.answer | contains("completion generated"))' >/dev/null
+echo "ok"
+
+echo "[2/9] tg-gateway dev message (recap[5])..."
+curl -sS -H "Content-Type: application/json" -H "X-Request-Id: ${req_id}" \
+  -d '{"userId":"tg:1","chatId":"tg_chat:1","text":"@tagmind recap[5]:"}' \
+  http://localhost:8081/v1/tg/dev/message | jq -e '.decision=="RESPOND" and (.answer | contains("completion generated"))' >/dev/null
 echo "ok"
 
 echo "[3/9] web-retriever search..."

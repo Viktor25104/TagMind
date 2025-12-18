@@ -124,10 +124,26 @@ public class ConversationsService {
         session.touch();
         session = sessions.save(session);
 
-        HistoryResult historyResult = fetchHistoryIfNeeded(session, input);
         String incomingText = resolveIncomingText(input);
         persistMessage(session, MessageDirection.IN, incomingText, requestId);
 
+        if (session.getMode() == ConversationMode.OFF) {
+            Map<String, Object> used = Map.of(
+                    "mode", session.getMode().name(),
+                    "llmCalled", false,
+                    "retrieverUsed", false
+            );
+            return new TagResult(
+                    "DO_NOT_RESPOND",
+                    null,
+                    session.getId(),
+                    session.getContactId(),
+                    input.tag(),
+                    used
+            );
+        }
+
+        HistoryResult historyResult = fetchHistoryIfNeeded(session, input);
         RetrieverContext retrieverContext = maybeCallRetriever(input, requestId);
         TagPromptBuilder.TagPrompt prompt = prompts.build(input, historyResult.entries(), retrieverContext.results());
 

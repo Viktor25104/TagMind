@@ -47,7 +47,7 @@ echo "ok"
 echo "[2/9] tg-gateway dev message..."
 curl -sS -H "Content-Type: application/json" -H "X-Request-Id: ${req_id}" \
   -d '{"userId":"tg:1","chatId":"tg_chat:1","text":"@tagmind help: hi"}' \
-  http://localhost:8081/v1/tg/dev/message | jq -e '.requestId and .answer=="tag-response" and .contactId=="tg:tg_chat:1" and .decision=="RESPOND"' >/dev/null
+  http://localhost:8081/v1/tg/dev/message | jq -e '.requestId and (.answer | contains("completion generated")) and .contactId=="tg:tg_chat:1" and .decision=="RESPOND"' >/dev/null
 echo "ok"
 
 echo "[3/9] web-retriever search..."

@@ -152,6 +152,26 @@ class ConversationsTagIT {
     }
 
     @Test
+    void tag_off_blocksResponse() throws Exception {
+        mvc.perform(post("/v1/conversations/upsert")
+                        .contentType("application/json")
+                        .content("""
+                                {"contactId":"tg:off_tag","mode":"OFF"}
+                                """))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/v1/conversations/tag")
+                        .contentType("application/json")
+                        .content("""
+                                {"contactId":"tg:off_tag","tag":"help","text":"@tagmind help:"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.decision").value("DO_NOT_RESPOND"))
+                .andExpect(jsonPath("$.replyText").doesNotExist())
+                .andExpect(jsonPath("$.used.mode").value("OFF"));
+    }
+
+    @Test
     void tag_persistsInOutMessages() throws Exception {
         mvc.perform(post("/v1/conversations/tag")
                         .contentType("application/json")

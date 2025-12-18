@@ -123,6 +123,9 @@ components:
         ok:
           type: boolean
           example: true
+        ignored:
+          type: boolean
+          description: true when message ignored (no @tagmind prefix)
 
     DevMessageRequest:
       type: object
@@ -145,10 +148,13 @@ components:
 
     DevMessageResponse:
       type: object
-      required: [requestId, answer]
+      required: [requestId, contactId, answer]
       properties:
         requestId:
           type: string
+        contactId:
+          type: string
+          example: "tg:987654"
         answer:
           type: string
           example: "World War II began on September 1, 1939."

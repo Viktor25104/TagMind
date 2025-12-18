@@ -26,6 +26,7 @@ type DevMessageRequest struct {
 
 type DevMessageResponse struct {
 	RequestID string `json:"requestId"`
+	ContactID string `json:"contactId"`
 	Answer    string `json:"answer"`
 }
 
@@ -216,7 +217,8 @@ func main() {
 			return
 		}
 
-		if _, err := ParseTagCommand(req.Text); err != nil {
+		cmd, err := ParseTagCommand(req.Text)
+		if err != nil {
 			writeJSON(w, http.StatusOK, reqID, AckResponse{
 				RequestID: reqID,
 				OK:        true,
@@ -225,10 +227,21 @@ func main() {
 			return
 		}
 
+		contactID, err := deriveContactID(req.ChatID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, reqID, map[string]any{
+				"requestId": reqID,
+				"code":      "BAD_REQUEST",
+				"message":   err.Error(),
+			})
+			return
+		}
+
 		// Phase 4 mock answer (will be replaced with orchestrator call later)
 		writeJSON(w, http.StatusOK, reqID, DevMessageResponse{
 			RequestID: reqID,
-			Answer:    "stub: message received; orchestration will be added in a later commit",
+			ContactID: contactID,
+			Answer:    "stub: message received for tag " + cmd.Tag + "; orchestration will be added in a later commit",
 		})
 	})
 

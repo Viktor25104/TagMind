@@ -6,34 +6,40 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: tagmind.local
+    - host: tg.tagmind.local
       http:
         paths:
-          - path: /tg
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: tg-gateway
                 port:
                   number: 80
-
-          - path: /orchestrator
+    - host: orchestrator.tagmind.local
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: orchestrator-api
                 port:
                   number: 80
-
-          - path: /retriever
+    - host: retriever.tagmind.local
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: web-retriever
                 port:
                   number: 80
-
-          - path: /llm
+    - host: llm.tagmind.local
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:

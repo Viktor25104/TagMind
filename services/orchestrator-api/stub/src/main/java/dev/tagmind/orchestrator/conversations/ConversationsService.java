@@ -6,10 +6,16 @@ import dev.tagmind.orchestrator.persistence.ConversationMessageRepository;
 import dev.tagmind.orchestrator.persistence.ConversationSessionEntity;
 import dev.tagmind.orchestrator.persistence.ConversationSessionRepository;
 import dev.tagmind.orchestrator.persistence.MessageDirection;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -112,11 +118,18 @@ public class ConversationsService {
         session.touch();
         session = sessions.save(session);
 
-        Map<String, Object> used = Map.of(
-                "tag", input.tag(),
-                "count", input.count(),
-                "implemented", false
-        );
+        HistoryResult historyResult = fetchHistoryIfNeeded(session, input);
+
+        Map<String, Object> used = new HashMap<>();
+        used.put("tag", input.tag());
+        used.put("locale", input.locale());
+        used.put("requestedCount", input.count());
+        used.put("historyUsed", historyResult.history().size());
+        used.put("implemented", false);
+        if (!historyResult.history().isEmpty()) {
+            used.put("historyLimit", historyResult.limit());
+            used.put("history", historyResult.history());
+        }
 
         return new TagResult(
                 "DO_NOT_RESPOND",
@@ -126,6 +139,44 @@ public class ConversationsService {
                 input.tag(),
                 used
         );
+    }
+
+    private HistoryResult fetchHistoryIfNeeded(ConversationSessionEntity session, TagInput input) {
+        if (!requiresHistory(input.tag())) {
+            return new HistoryResult(0, List.of());
+        }
+        int limit = effectiveCount(input.tag(), input.count());
+        PageRequest page = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+        List<ConversationMessageEntity> latest = messages.findBySession(session, page);
+        if (latest.isEmpty()) {
+            return new HistoryResult(limit, List.of());
+        }
+        List<ConversationMessageEntity> copy = new ArrayList<>(latest);
+        Collections.reverse(copy);
+        List<Map<String, Object>> history = copy.stream()
+                .map(msg -> Map.<String, Object>of(
+                        "direction", msg.getDirection().name(),
+                        "text", msg.getMessageText(),
+                        "createdAt", msg.getCreatedAt().toString()
+                ))
+                .toList();
+        return new HistoryResult(limit, history);
+    }
+
+    private boolean requiresHistory(String tag) {
+        return switch (tag) {
+            case "recap", "judge", "fix" -> true;
+            default -> false;
+        };
+    }
+
+    private int effectiveCount(String tag, Integer requested) {
+        if (requested != null && requested > 0) return requested;
+        return switch (tag) {
+            case "judge" -> 8;
+            case "fix" -> 5;
+            default -> 10;
+        };
     }
 
     public record MessageResult(
@@ -151,4 +202,6 @@ public class ConversationsService {
             String payload,
             String locale
     ) {}
+
+    private record HistoryResult(int limit, List<Map<String, Object>> history) {}
 }

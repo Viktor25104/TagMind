@@ -41,3 +41,15 @@ Reasons:
 Reasons:
 - Simplifies local cluster routing without per-service LoadBalancers.
 - Mirrors compose port layout while keeping DNS/host stable (`tagmind.local`).
+
+## Tag router uses Postgres history + prompt templates
+Reasons:
+- Recap/judge/fix need deterministic context; Postgres already persists IN/OUT, so fetching last N messages keeps history consistent across replicas.
+- Templates ensure each tag has predictable behavior even before real LLMs arrive; only the stub LLM text varies.
+- Variant A (chat-wide history) matches the product spec for recap/judge/fix and keeps smoke/tests straightforward.
+
+## One-shot kind bootstrap script
+Reasons:
+- Reduces setup drift: a single script handles cluster creation, ingress install, image builds, loading, manifests, and readiness checks.
+- Mirrors compose behavior (local images tagged `:local`); avoids manual `kind load` mistakes.
+- Provides onboarding instructions automatically so agents/humans can smoke test via ingress immediately.

@@ -4,22 +4,23 @@
 Purpose: Telegram edge. Accepts Telegram webhooks (JSON validated only) and provides a dev endpoint to simulate a message.
 - Port: 8081 (compose); Ingress: `/tg/...`
 - Endpoints: `GET /healthz`, `POST /v1/tg/webhook`, `POST /v1/tg/dev/message`
-- Behavior: validates HTTP method and JSON; returns `{requestId, ok}` or stub answer message. Always sets `X-Request-Id` response header.
-- Env usage: none in stub (secrets placeholders exist for future).
+- Behavior: validates HTTP method and JSON; only processes messages that begin with `@tagmind <tag>[: ...]`. Parser supports optional `[n]` counts and payload. Derives `contactId = "tg:" + chatId`, calls orchestrator `/v1/conversations/tag`, and returns `decision` + `replyText`. Non-commands return `{ok:true, ignored:true}`. Always sets `X-Request-Id`.
+- Env usage: `ORCHESTRATOR_URL` / `ORCHESTRATOR_TAG_URL` for downstream calls (defaults to service DNS in compose/kind).
 
 ## orchestrator-api (Java/Spring, `services/orchestrator-api/stub`)
-Purpose: Orchestration surface; calls retriever + llm-gateway stubs with request id propagation.
+Purpose: Orchestration surface; persists sessions/messages in Postgres and calls retriever + llm-gateway stubs.
 - Port: 8082; Ingress: `/orchestrator/...`
 - Endpoints:
   - `GET /healthz`
   - `POST /v1/orchestrate`
   - `POST /v1/conversations/upsert` (create/update session mode for a contact)
   - `POST /v1/conversations/message` (store IN message; if mode=SUGGEST, call llm-gateway and store OUT message)
+  - `POST /v1/conversations/tag` (tag router for help/llm/web/recap/judge/fix/plan/safe)
 - Behavior:
   - `/v1/orchestrate`: validates required fields; for modes other than `no_context` it calls web-retriever (max 3 results), converts results to llm citations, and always calls llm-gateway. Retries transient network errors once, applies connect/read timeouts, and falls back to llm-only on retriever failure.
-  - Conversations: persists sessions/messages in Postgres (Flyway migrations on startup). Session mode is `OFF|SUGGEST`; `OFF` returns `DO_NOT_RESPOND` without calling LLM; `SUGGEST` calls llm-gateway and returns/saves a suggested reply.
-  - Sets `X-Request-Id` header in responses. Downstream URLs are configurable via `RETRIEVER_URL` / `LLM_URL` (compose defaults include service DNS + ports).
-- Build: Maven (JDK 21); packaged jar already present in `target/` for the stub.
+  - Conversations/tag: persists sessions + IN/OUT messages in Postgres (Flyway migrations on startup). Session mode is `OFF|SUGGEST`; `OFF` for tags returns `DO_NOT_RESPOND` without calling LLM. `SUGGEST` continues to call llm-gateway and stores suggested replies. Recap/judge/fix fetch the last N messages (variant A) ordered chronologically; `web` tags call web-retriever to produce citations before prompting LLM. Tag prompts are deterministic stub templates wired per tag.
+  - Sets `X-Request-Id` header in responses. Downstream URLs are configurable via `RETRIEVER_URL` / `LLM_URL` (compose defaults include service DNS + ports). `RETRIEVER_URL` is reused for tag routing as well.
+- Build: Maven (JDK 21); stub uses Spring Boot + Flyway + Testcontainers for integration tests.
 
 ## web-retriever (Python/FastAPI, `services/web-retriever/stub`)
 Purpose: Web search abstraction; stubbed deterministic search results.

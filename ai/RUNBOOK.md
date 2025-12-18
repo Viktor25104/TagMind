@@ -8,6 +8,11 @@
 5) Teardown: `make compose-down`.
 
 ## Kubernetes (kind)
+Option A – one-shot script:
+1) `scripts/k8s-one-shot.sh`
+2) Follow printed instructions (ingress health check, cleanup command).
+
+Option B – manual (legacy):
 1) `make kind-up` (creates `tagmind` cluster, installs ingress-nginx).
 2) Build/load images (see `docs/dev-setup.md` section 7.2).
 3) `make k8s-apply` (applies manifests, including example secrets).

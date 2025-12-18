@@ -6,10 +6,16 @@ import dev.tagmind.orchestrator.persistence.ConversationMessageRepository;
 import dev.tagmind.orchestrator.persistence.ConversationSessionEntity;
 import dev.tagmind.orchestrator.persistence.ConversationSessionRepository;
 import dev.tagmind.orchestrator.persistence.MessageDirection;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -19,15 +25,21 @@ public class ConversationsService {
     private final ConversationSessionRepository sessions;
     private final ConversationMessageRepository messages;
     private final LlmGatewayClient llm;
+    private final RetrieverClient retriever;
+    private final TagPromptBuilder prompts;
 
     public ConversationsService(
             ConversationSessionRepository sessions,
             ConversationMessageRepository messages,
-            LlmGatewayClient llm
+            LlmGatewayClient llm,
+            RetrieverClient retriever,
+            TagPromptBuilder prompts
     ) {
         this.sessions = sessions;
         this.messages = messages;
         this.llm = llm;
+        this.retriever = retriever;
+        this.prompts = prompts;
     }
 
     @Transactional
@@ -100,10 +112,198 @@ public class ConversationsService {
         );
     }
 
+    @Transactional
+    public TagResult handleTag(TagInput input, String requestId) {
+        ConversationSessionEntity session = sessions.findByContactId(input.contactId())
+                .orElseGet(() -> {
+                    ConversationSessionEntity s = new ConversationSessionEntity();
+                    s.setContactId(input.contactId());
+                    s.setMode(ConversationMode.SUGGEST);
+                    return s;
+                });
+        session.touch();
+        session = sessions.save(session);
+
+        String incomingText = resolveIncomingText(input);
+        persistMessage(session, MessageDirection.IN, incomingText, requestId);
+
+        if (session.getMode() == ConversationMode.OFF) {
+            Map<String, Object> used = Map.of(
+                    "mode", session.getMode().name(),
+                    "llmCalled", false,
+                    "retrieverUsed", false
+            );
+            return new TagResult(
+                    "DO_NOT_RESPOND",
+                    null,
+                    session.getId(),
+                    session.getContactId(),
+                    input.tag(),
+                    used
+            );
+        }
+
+        HistoryResult historyResult = fetchHistoryIfNeeded(session, input);
+        RetrieverContext retrieverContext = maybeCallRetriever(input, requestId);
+        TagPromptBuilder.TagPrompt prompt = prompts.build(input, historyResult.entries(), retrieverContext.results());
+
+        LlmGatewayClient.LlmResponse llmResponse = llm.complete(prompt.prompt(), input.locale(), requestId);
+
+        Map<String, Object> used = new HashMap<>();
+        used.put("tag", input.tag());
+        used.put("locale", input.locale());
+        used.put("requestedCount", input.count());
+        used.put("historyUsed", historyResult.entries().size());
+        used.put("llmCalled", true);
+        used.put("promptType", prompt.type());
+        used.put("promptTokens", prompt.tokenEstimate());
+        used.put("implemented", true);
+        used.putAll(prompt.debug());
+        used.put("retrieverUsed", retrieverContext.used());
+        used.put("citationsCount", retrieverContext.results().size());
+        if (!historyResult.entries().isEmpty()) {
+            used.put("historyLimit", historyResult.limit());
+            used.put("history", historyResult.asDebugHistory());
+        }
+        if (!retrieverContext.results().isEmpty()) {
+            used.put("citations", retrieverContext.results());
+        }
+
+        persistMessage(session, MessageDirection.OUT, llmResponse.text(), requestId);
+
+        return new TagResult(
+                "RESPOND",
+                llmResponse.text(),
+                session.getId(),
+                session.getContactId(),
+                input.tag(),
+                used
+        );
+    }
+
+    private HistoryResult fetchHistoryIfNeeded(ConversationSessionEntity session, TagInput input) {
+        if (!requiresHistory(input.tag())) {
+            return new HistoryResult(0, List.of());
+        }
+        int limit = effectiveCount(input.tag(), input.count());
+        PageRequest page = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+        List<ConversationMessageEntity> latest = messages.findBySession(session, page);
+        if (latest.isEmpty()) {
+            return new HistoryResult(limit, List.of());
+        }
+        List<ConversationMessageEntity> copy = new ArrayList<>(latest);
+        Collections.reverse(copy);
+        List<TagPromptBuilder.HistoryEntry> history = copy.stream()
+                .map(msg -> new TagPromptBuilder.HistoryEntry(
+                        msg.getDirection().name(),
+                        msg.getMessageText(),
+                        msg.getCreatedAt().toString()
+                ))
+                .toList();
+        return new HistoryResult(limit, history);
+    }
+
+    private boolean requiresHistory(String tag) {
+        return switch (tag) {
+            case "recap", "judge", "fix" -> true;
+            default -> false;
+        };
+    }
+
+    private int effectiveCount(String tag, Integer requested) {
+        if (requested != null && requested > 0) return requested;
+        return switch (tag) {
+            case "judge" -> 8;
+            case "fix" -> 5;
+            default -> 10;
+        };
+    }
+
+    private RetrieverContext maybeCallRetriever(TagInput input, String requestId) {
+        if (!"web".equals(input.tag())) {
+            return new RetrieverContext(false, List.of());
+        }
+        String query = (input.payload() == null || input.payload().trim().isEmpty())
+                ? "TagMind web search placeholder"
+                : input.payload().trim();
+        String locale = (input.locale() == null || input.locale().trim().isEmpty())
+                ? "ru-RU"
+                : input.locale().trim();
+        RetrieverClient.RetrieverResponse response = retriever.search(query, locale, 3, requestId);
+        if (response == null || response.results() == null || response.results().isEmpty()) {
+            return new RetrieverContext(false, List.of());
+        }
+        List<Map<String, Object>> citations = response.results().stream()
+                .map(r -> Map.<String, Object>of(
+                        "title", r.title(),
+                        "snippet", r.snippet(),
+                        "url", r.url(),
+                        "source", r.source(),
+                        "publishedAt", r.publishedAt()
+                ))
+                .toList();
+        return new RetrieverContext(true, citations);
+    }
+
     public record MessageResult(
             String decision,
             String suggestedReply,
             UUID sessionId,
             Map<String, Object> used
     ) {}
+
+    public record TagResult(
+            String decision,
+            String replyText,
+            UUID sessionId,
+            String contactId,
+            String tag,
+            Map<String, Object> used
+    ) {}
+
+    public record TagInput(
+            String contactId,
+            String tag,
+            Integer count,
+            String payload,
+            String locale,
+            String text
+    ) {}
+
+    private record HistoryResult(int limit, List<TagPromptBuilder.HistoryEntry> entries) {
+        List<Map<String, Object>> asDebugHistory() {
+            return entries.stream()
+                    .map(entry -> Map.<String, Object>of(
+                            "direction", entry.direction(),
+                            "text", entry.text(),
+                            "createdAt", entry.createdAt()
+                    ))
+                    .toList();
+        }
+    }
+
+    private record RetrieverContext(boolean used, List<Map<String, Object>> results) {}
+
+    private void persistMessage(ConversationSessionEntity session, MessageDirection direction, String text, String requestId) {
+        ConversationMessageEntity message = new ConversationMessageEntity();
+        message.setSession(session);
+        message.setDirection(direction);
+        message.setMessageText(text);
+        message.setRequestId(requestId);
+        messages.save(message);
+    }
+
+    private String resolveIncomingText(TagInput input) {
+        if (input.text() != null && !input.text().trim().isEmpty()) {
+            return input.text().trim();
+        }
+        StringBuilder sb = new StringBuilder("@tagmind ").append(input.tag());
+        if (input.count() != null && input.count() > 0) {
+            sb.append("[").append(input.count()).append("]");
+        }
+        if (input.payload() != null && !input.payload().trim().isEmpty()) {
+            sb.append(": ").append(input.payload().trim());
+        }
+        return sb.toString();
+    }
 }

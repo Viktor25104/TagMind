@@ -25,17 +25,20 @@ public class ConversationsService {
     private final ConversationSessionRepository sessions;
     private final ConversationMessageRepository messages;
     private final LlmGatewayClient llm;
+    private final RetrieverClient retriever;
     private final TagPromptBuilder prompts;
 
     public ConversationsService(
             ConversationSessionRepository sessions,
             ConversationMessageRepository messages,
             LlmGatewayClient llm,
+            RetrieverClient retriever,
             TagPromptBuilder prompts
     ) {
         this.sessions = sessions;
         this.messages = messages;
         this.llm = llm;
+        this.retriever = retriever;
         this.prompts = prompts;
     }
 
@@ -122,7 +125,8 @@ public class ConversationsService {
         session = sessions.save(session);
 
         HistoryResult historyResult = fetchHistoryIfNeeded(session, input);
-        TagPromptBuilder.TagPrompt prompt = prompts.build(input, historyResult.entries());
+        RetrieverContext retrieverContext = maybeCallRetriever(input, requestId);
+        TagPromptBuilder.TagPrompt prompt = prompts.build(input, historyResult.entries(), retrieverContext.results());
 
         LlmGatewayClient.LlmResponse llmResponse = llm.complete(prompt.prompt(), input.locale(), requestId);
 
@@ -136,9 +140,14 @@ public class ConversationsService {
         used.put("promptTokens", prompt.tokenEstimate());
         used.put("implemented", true);
         used.putAll(prompt.debug());
+        used.put("retrieverUsed", retrieverContext.used());
+        used.put("citationsCount", retrieverContext.results().size());
         if (!historyResult.entries().isEmpty()) {
             used.put("historyLimit", historyResult.limit());
             used.put("history", historyResult.asDebugHistory());
+        }
+        if (!retrieverContext.results().isEmpty()) {
+            used.put("citations", retrieverContext.results());
         }
 
         return new TagResult(
@@ -189,6 +198,32 @@ public class ConversationsService {
         };
     }
 
+    private RetrieverContext maybeCallRetriever(TagInput input, String requestId) {
+        if (!"web".equals(input.tag())) {
+            return new RetrieverContext(false, List.of());
+        }
+        String query = (input.payload() == null || input.payload().trim().isEmpty())
+                ? "TagMind web search placeholder"
+                : input.payload().trim();
+        String locale = (input.locale() == null || input.locale().trim().isEmpty())
+                ? "ru-RU"
+                : input.locale().trim();
+        RetrieverClient.RetrieverResponse response = retriever.search(query, locale, 3, requestId);
+        if (response == null || response.results() == null || response.results().isEmpty()) {
+            return new RetrieverContext(false, List.of());
+        }
+        List<Map<String, Object>> citations = response.results().stream()
+                .map(r -> Map.<String, Object>of(
+                        "title", r.title(),
+                        "snippet", r.snippet(),
+                        "url", r.url(),
+                        "source", r.source(),
+                        "publishedAt", r.publishedAt()
+                ))
+                .toList();
+        return new RetrieverContext(true, citations);
+    }
+
     public record MessageResult(
             String decision,
             String suggestedReply,
@@ -224,4 +259,6 @@ public class ConversationsService {
                     .toList();
         }
     }
+
+    private record RetrieverContext(boolean used, List<Map<String, Object>> results) {}
 }

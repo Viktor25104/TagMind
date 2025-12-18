@@ -10,7 +10,7 @@ import java.util.StringJoiner;
 @Component
 public class TagPromptBuilder {
 
-    public TagPrompt build(ConversationsService.TagInput input, List<HistoryEntry> history) {
+    public TagPrompt build(ConversationsService.TagInput input, List<HistoryEntry> history, List<Map<String, Object>> citations) {
         return switch (input.tag()) {
             case "help" -> helpPrompt();
             case "llm" -> llmPrompt(input.payload());
@@ -19,6 +19,7 @@ public class TagPromptBuilder {
             case "fix" -> fixPrompt(history, input.payload());
             case "plan" -> planPrompt(input.payload());
             case "safe" -> safePrompt(input.payload());
+            case "web" -> webPrompt(input.payload(), citations);
             default -> llmPrompt(input.payload());
         };
     }
@@ -118,6 +119,30 @@ public class TagPromptBuilder {
                 Ответ должен быть по-русски и лаконичным.
                 """.formatted(topic);
         return new TagPrompt("safe", prompt.trim(), Map.of("payloadLen", topic.length()));
+    }
+
+    private TagPrompt webPrompt(String payload, List<Map<String, Object>> citations) {
+        String query = (payload == null || payload.trim().isEmpty())
+                ? "неизвестный запрос"
+                : payload.trim();
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Ниже приведены результаты веб-поиска. Используй только их для ответа и добавь цитаты вида [1], [2].\n");
+        for (int i = 0; i < citations.size(); i++) {
+            Map<String, Object> c = citations.get(i);
+            prompt.append("[").append(i + 1).append("] ")
+                    .append(c.getOrDefault("title", "Без названия"))
+                    .append(" — ")
+                    .append(c.getOrDefault("snippet", ""))
+                    .append(" (")
+                    .append(c.getOrDefault("url", ""))
+                    .append(")\n");
+        }
+        prompt.append("Вопрос пользователя: ").append(query);
+        Map<String, Object> debug = Map.of(
+                "payloadLen", query.length(),
+                "citationsProvided", citations.size()
+        );
+        return new TagPrompt("web", prompt.toString().trim(), debug);
     }
 
     private String formatHistory(List<HistoryEntry> history) {

@@ -196,35 +196,22 @@ public class ConversationsController {
                     requestId
             );
         } catch (RestClientResponseException ex) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .headers(responseHeaders)
-                    .body(Map.of(
-                            "requestId", requestId,
-                            "code", "LLM_ERROR",
-                            "message", "llm-gateway call failed (status=" + ex.getStatusCode().value() + ")"
-                    ));
+            return upstreamError(responseHeaders, requestId, "LLM_ERROR", "llm-gateway call failed (status=" + ex.getStatusCode().value() + ")");
         } catch (RestClientException ex) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .headers(responseHeaders)
-                    .body(Map.of(
-                            "requestId", requestId,
-                            "code", "LLM_ERROR",
-                            "message", "llm-gateway call failed"
-                    ));
+            return upstreamError(responseHeaders, requestId, "LLM_ERROR", "llm-gateway call failed");
         }
-
-        Map<String, Object> bodyMap = new HashMap<>();
-        bodyMap.put("requestId", requestId);
-        bodyMap.put("decision", result.decision());
-        bodyMap.put("replyText", result.replyText());
-        bodyMap.put("sessionId", result.sessionId().toString());
-        bodyMap.put("contactId", result.contactId());
-        bodyMap.put("tag", result.tag());
-        bodyMap.put("used", result.used());
 
         return ResponseEntity.ok()
                 .headers(responseHeaders)
-                .body(bodyMap);
+                .body(Map.of(
+                        "requestId", requestId,
+                        "decision", result.decision(),
+                        "replyText", result.replyText(),
+                        "sessionId", result.sessionId().toString(),
+                        "contactId", result.contactId(),
+                        "tag", result.tag(),
+                        "used", result.used()
+                ));
     }
 
     private ResponseEntity<Map<String, Object>> badRequest(HttpHeaders headers, String requestId, String message) {
@@ -233,6 +220,16 @@ public class ConversationsController {
                 .body(Map.of(
                         "requestId", requestId,
                         "code", "BAD_REQUEST",
+                        "message", message
+                ));
+    }
+
+    private ResponseEntity<Map<String, Object>> upstreamError(HttpHeaders headers, String requestId, String code, String message) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .headers(headers)
+                .body(Map.of(
+                        "requestId", requestId,
+                        "code", code,
                         "message", message
                 ));
     }

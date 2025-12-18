@@ -17,12 +17,16 @@ import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 public class ConversationsController {
 
     private static final SecureRandom RNG = new SecureRandom();
     private static final HexFormat HEX = HexFormat.of();
+    private static final Set<String> SUPPORTED_TAGS = Set.of(
+            "help", "llm", "web", "recap", "judge", "fix", "plan", "safe"
+    );
 
     private final ConversationsService service;
 
@@ -154,5 +158,81 @@ public class ConversationsController {
         body.put("sessionId", result.sessionId().toString());
         body.put("used", result.used());
         return body;
+    }
+
+    @PostMapping(
+            value = "/v1/conversations/tag",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<Map<String, Object>> tag(@RequestBody TagRequest body, HttpServletRequest req) {
+        String requestId = getOrCreateRequestId(req);
+        HttpHeaders responseHeaders = new HttpHeaders();
+        responseHeaders.set("X-Request-Id", requestId);
+
+        String contactId = body.contactId() == null ? "" : body.contactId().trim();
+        String tag = body.tag() == null ? "" : body.tag().trim().toLowerCase();
+        Integer count = body.count();
+        String payload = body.payload() == null ? null : body.payload().trim();
+        String locale = body.locale() == null || body.locale().trim().isEmpty() ? "ru-RU" : body.locale().trim();
+
+        if (contactId.isEmpty()) {
+            return badRequest(responseHeaders, requestId, "contactId is required");
+        }
+        if (tag.isEmpty()) {
+            return badRequest(responseHeaders, requestId, "tag is required");
+        }
+        if (!SUPPORTED_TAGS.contains(tag)) {
+            return badRequest(responseHeaders, requestId, "tag is not supported");
+        }
+        if (count != null && count <= 0) {
+            return badRequest(responseHeaders, requestId, "count must be positive");
+        }
+
+        String text = body.text() == null ? null : body.text().trim();
+
+        ConversationsService.TagResult result;
+        try {
+            result = service.handleTag(
+                    new ConversationsService.TagInput(contactId, tag, count, payload, locale, text),
+                    requestId
+            );
+        } catch (RestClientResponseException ex) {
+            return upstreamError(responseHeaders, requestId, "LLM_ERROR", "llm-gateway call failed (status=" + ex.getStatusCode().value() + ")");
+        } catch (RestClientException ex) {
+            return upstreamError(responseHeaders, requestId, "LLM_ERROR", "llm-gateway call failed");
+        }
+
+        return ResponseEntity.ok()
+                .headers(responseHeaders)
+                .body(Map.of(
+                        "requestId", requestId,
+                        "decision", result.decision(),
+                        "replyText", result.replyText(),
+                        "sessionId", result.sessionId().toString(),
+                        "contactId", result.contactId(),
+                        "tag", result.tag(),
+                        "used", result.used()
+                ));
+    }
+
+    private ResponseEntity<Map<String, Object>> badRequest(HttpHeaders headers, String requestId, String message) {
+        return ResponseEntity.badRequest()
+                .headers(headers)
+                .body(Map.of(
+                        "requestId", requestId,
+                        "code", "BAD_REQUEST",
+                        "message", message
+                ));
+    }
+
+    private ResponseEntity<Map<String, Object>> upstreamError(HttpHeaders headers, String requestId, String code, String message) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .headers(headers)
+                .body(Map.of(
+                        "requestId", requestId,
+                        "code", code,
+                        "message", message
+                ));
     }
 }

@@ -99,6 +99,30 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /v1/conversations/tag:
+    post:
+      tags: [conversations]
+      summary: Handle @tagmind commands with tag-specific routing
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagRequest"
+      responses:
+        "200":
+          description: Tag routing response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   parameters:
     XRequestId:
@@ -257,6 +281,59 @@ components:
         sessionId:
           type: string
           format: uuid
+        used:
+          type: object
+          additionalProperties: true
+
+    TagName:
+      type: string
+      description: Supported @tagmind command tags.
+      enum: [help, llm, web, recap, judge, fix, plan, safe]
+
+    TagDecision:
+      type: string
+      enum: [RESPOND, DO_NOT_RESPOND]
+
+    TagRequest:
+      type: object
+      required: [contactId, tag]
+      properties:
+        contactId:
+          type: string
+          example: "tg:12345"
+        tag:
+          $ref: "#/components/schemas/TagName"
+        count:
+          type: integer
+          minimum: 1
+          description: Optional number of history messages to fetch (recap/judge/fix).
+        payload:
+          type: string
+          description: Optional free-form payload provided after the tag.
+          example: "Summarize action items"
+        locale:
+          type: string
+          example: "ru-RU"
+
+    TagResponse:
+      type: object
+      required: [requestId, decision, sessionId, contactId, tag]
+      properties:
+        requestId:
+          type: string
+        decision:
+          $ref: "#/components/schemas/TagDecision"
+        replyText:
+          type: string
+          nullable: true
+          description: Text to send back to the channel when decision is RESPOND.
+        sessionId:
+          type: string
+          format: uuid
+        contactId:
+          type: string
+        tag:
+          $ref: "#/components/schemas/TagName"
         used:
           type: object
           additionalProperties: true
